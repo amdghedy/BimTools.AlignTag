@@ -4,6 +4,8 @@ namespace AlignTool.Models
     {
         public bool EnableFileLogging { get; set; } = true;
         public bool EnableVerboseLogging { get; set; } = false;
+        public bool ShowDetailedResults { get; set; } = true;
+        public bool SkipPinnedTags { get; set; } = true;
         public int LogRetentionDays { get; set; } = 14;
         public double StackSpacingMm { get; set; } = 45;
         public double MaxMoveMm { get; set; } = 1200;
