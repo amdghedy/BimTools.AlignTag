@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>BIM TOOLS Align</Name>
+    <Assembly>BimTools.Align.dll</Assembly>
+    <FullClassName>AlignTool.App</FullClassName>
+    <ClientId>b7c72e5f-4ad1-4df8-ae45-2bdf91c01820</ClientId>
+    <VendorId>BIMTOOLS</VendorId>
+    <VendorDescription>BIM TOOLS – Tag Align Suite for Revit 2020</VendorDescription>
+  </AddIn>
+</RevitAddIns>
