@@ -78,18 +78,23 @@ namespace AlignTool.Commands
                     {
                         bool any = false;
                         for (int i = 0; i < tags.Count; i++)
-                        for (int j = i + 1; j < tags.Count; j++)
                         {
-                            XYZ a = tags[i].TagHeadPosition, b = tags[j].TagHeadPosition;
-                            double d = a.DistanceTo(b);
-                            if (d >= minDist || d < 1e-9) continue;
-                            XYZ dir = (b - a).Normalize();
-                            double push = (minDist - d) * 0.5;
-                            using (var t = new Transaction(doc, "Push"))
+                            for (int j = i + 1; j < tags.Count; j++)
                             {
-                                t.Start();
-                                bool ok = tags[i].TrySetHeadPosition(a - dir * push) && tags[j].TrySetHeadPosition(b + dir * push);
-                                if (ok) { t.Commit(); n++; any = true; } else t.RollBack();
+                                XYZ a = tags[i].TagHeadPosition;
+                                XYZ b = tags[j].TagHeadPosition;
+                                double d = a.DistanceTo(b);
+                                if (d >= minDist || d < 1e-9) continue;
+                                XYZ dir = (b - a).Normalize();
+                                double push = (minDist - d) * 0.5;
+                                using (var t = new Transaction(doc, "Push"))
+                                {
+                                    t.Start();
+                                    bool ok = tags[i].TrySetHeadPosition(a - dir * push)
+                                           && tags[j].TrySetHeadPosition(b + dir * push);
+                                    if (ok) { t.Commit(); n++; any = true; }
+                                    else t.RollBack();
+                                }
                             }
                         }
                         if (!any) break;
@@ -108,7 +113,7 @@ namespace AlignTool.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            return PinUnpin(commandData, ref message, true);
+            return PinUnpinHelper.Run(commandData, ref message, true);
         }
     }
 
@@ -117,7 +122,7 @@ namespace AlignTool.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            return PinUnpin(commandData, ref message, false);
+            return PinUnpinHelper.Run(commandData, ref message, false);
         }
     }
 
@@ -150,26 +155,123 @@ namespace AlignTool.Commands
         }
     }
 
-    // local helpers used by PinTagsCommand / UnpinTagsCommand
-    static class PinLocal
+    [Transaction(TransactionMode.Manual)]
+    public class ArrangeLeftCommand : IExternalCommand
     {
-        // intentionally empty – PinTagsCommand calls PinUnpin below
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            return ArrangeSideHelper.Run(commandData, ref message, left: true);
+        }
     }
 
-    // shared method in namespace scope is invalid; use class methods instead
-}
-
-namespace AlignTool.Commands
-{
-    public partial class PinTagsCommand
+    [Transaction(TransactionMode.Manual)]
+    public class ArrangeRightCommand : IExternalCommand
     {
-        // already defined above
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            return ArrangeSideHelper.Run(commandData, ref message, left: false);
+        }
     }
 
-    // Pin/Unpin implementation helpers via extension methods on commands
-    internal static class PinUnpinBridge
+    public static class ArrangeSideHelper
     {
-        public static Result PinUnpin(ExternalCommandData commandData, ref string message, bool pinned)
-            => PinUnpinHelper.Run(commandData, ref message, pinned);
+        public static Result Run(ExternalCommandData commandData, ref string message, bool left)
+        {
+            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            Document doc = uidoc?.Document;
+            View view = doc?.ActiveView;
+            if (doc == null) { message = "No document."; return Result.Failed; }
+            try
+            {
+                var tags = SelectionHelper.GetSelectedTags(uidoc, allowPick: false);
+                if (tags.Count == 0)
+                    tags = SelectionHelper.GetAllTagsInView(doc, view).ToList();
+                var ordered = tags.Where(t => !t.Pinned).OrderBy(t =>
+                {
+                    XYZ end = TagInfo.GetLeaderEndSafe(t, doc, view, out _);
+                    return end != null ? end.Y : t.TagHeadPosition.Y;
+                }).ToList();
+                if (ordered.Count == 0) { TaskDialog.Show("Arrange", "No movable tags."); return Result.Cancelled; }
+                double spacing = UnitHelper.MmToFeet(45);
+                double avgX = ordered.Average(t => t.TagHeadPosition.X);
+                double columnX = left ? avgX - UnitHelper.MmToFeet(400) : avgX + UnitHelper.MmToFeet(400);
+                double midY = ordered.Average(t => t.TagHeadPosition.Y);
+                double startY = midY - (ordered.Count - 1) * spacing * 0.5;
+                int n = 0;
+                using (var tg = new TransactionGroup(doc, left ? "Arrange Left" : "Arrange Right"))
+                {
+                    tg.Start();
+                    for (int i = 0; i < ordered.Count; i++)
+                    {
+                        XYZ dest = new XYZ(columnX, startY + i * spacing, ordered[i].TagHeadPosition.Z);
+                        using (var t = new Transaction(doc, "Arrange"))
+                        {
+                            t.Start();
+                            if (ordered[i].TrySetHeadPosition(dest)) { t.Commit(); n++; }
+                            else t.RollBack();
+                        }
+                    }
+                    tg.Assimilate();
+                }
+                TaskDialog.Show("Arrange", n + " tag(s) arranged.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex) { Logger.Error("Arrange failed", ex); message = ex.Message; return Result.Failed; }
+        }
+    }
+
+    [Transaction(TransactionMode.Manual)]
+    public class EqualOffsetCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            return new MatchLeaderLengthsCommand().Execute(commandData, ref message, elements);
+        }
+    }
+
+    [Transaction(TransactionMode.Manual)]
+    public class ParallelLeadersCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            Document doc = uidoc?.Document;
+            View view = doc?.ActiveView;
+            if (doc == null) { message = "No document."; return Result.Failed; }
+            try
+            {
+                var tags = SelectionHelper.GetSelectedTags(uidoc, allowPick: true, "Select tags (first = master)");
+                if (tags.Count < 2) { TaskDialog.Show("Parallel", "Select at least two tags."); return Result.Cancelled; }
+                XYZ masterEnd = TagInfo.GetLeaderEndSafe(tags[0], doc, view, out _);
+                if (masterEnd == null) { TaskDialog.Show("Parallel", "Master has no end."); return Result.Failed; }
+                XYZ masterDir = tags[0].TagHeadPosition - masterEnd;
+                if (masterDir.GetLength() < 1e-9) { TaskDialog.Show("Parallel", "Zero length."); return Result.Failed; }
+                masterDir = masterDir.Normalize();
+                int n = 0;
+                using (var tg = new TransactionGroup(doc, "Parallel Leaders"))
+                {
+                    tg.Start();
+                    for (int i = 1; i < tags.Count; i++)
+                    {
+                        if (tags[i].Pinned) continue;
+                        XYZ end = TagInfo.GetLeaderEndSafe(tags[i], doc, view, out _);
+                        if (end == null) continue;
+                        double len = tags[i].TagHeadPosition.DistanceTo(end);
+                        if (len < 1e-6) len = UnitHelper.MmToFeet(150);
+                        XYZ dest = end + masterDir * len;
+                        using (var t = new Transaction(doc, "Parallel"))
+                        {
+                            t.Start();
+                            if (tags[i].TrySetHeadPosition(dest)) { t.Commit(); n++; }
+                            else t.RollBack();
+                        }
+                    }
+                    tg.Assimilate();
+                }
+                TaskDialog.Show("Parallel", n + " leader(s) parallel.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex) { Logger.Error("Parallel failed", ex); message = ex.Message; return Result.Failed; }
+        }
     }
 }
