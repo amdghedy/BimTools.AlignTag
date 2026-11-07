@@ -46,6 +46,27 @@ jobs:
           Write-Host ("Validated {0} ({1} bytes)" -f $file, $item.Length)
         }
 
+        [xml]$manifest = Get-Content -LiteralPath "bin/x64/Release/BimTools.Align.addin" -Raw
+        $application = @($manifest.RevitAddIns.AddIn | Where-Object { $_.Type -eq "Application" })
+        if ($application.Count -ne 1) {
+          throw "The add-in manifest must contain exactly one Application registration."
+        }
+        if ([string]::IsNullOrWhiteSpace($application[0].AddInId)) {
+          throw "The add-in manifest is missing the required AddInId element."
+        }
+        $parsedGuid = [guid]::Empty
+        if (-not [guid]::TryParse($application[0].AddInId, [ref]$parsedGuid)) {
+          throw "The add-in manifest AddInId is not a valid GUID."
+        }
+        if ($application[0].ClientId) {
+          throw "ClientId is not a substitute for the required Revit AddInId element."
+        }
+        if ([string]::IsNullOrWhiteSpace($application[0].FullClassName) -or
+            [string]::IsNullOrWhiteSpace($application[0].Assembly)) {
+          throw "The add-in manifest must specify Assembly and FullClassName."
+        }
+        Write-Host "Validated Revit Application manifest and AddInId."
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
