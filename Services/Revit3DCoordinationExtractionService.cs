@@ -383,7 +383,7 @@ namespace AlignTool.Services
                     }
                     catch { result.BooleanFailures++; }
                 }
-                if (maxIntersectionVolume > 1e-9)
+                if (maxIntersectionVolume > 1e-12)
                     result.Clashes.Add(new ClashRecord
                     {
                         FirstElementKey = a.Key, SecondElementKey = b.Key,
