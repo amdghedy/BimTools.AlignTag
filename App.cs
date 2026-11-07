@@ -91,6 +91,12 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("AnnotationDistV", "Dist V", "AlignTool.Commands.AnnotationDistributeVerticalCommand", "Evenly distribute selected annotation centres vertically.", null, "dist_v"),
                     RibbonHelper.CreatePushButtonData("AnnotationResolve", "Resolve", "AlignTool.Commands.AnnotationCollisionResolveCommand", "Preview and optionally resolve annotation overlaps; pinned items are skipped.", null, "untangle"));
 
+                RibbonPanel pMep = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
+                RibbonHelper.AddStackedTriple(pMep,
+                    RibbonHelper.CreatePushButtonData("MepTagOrganizer", "MEP Organize", "AlignTool.Commands.MepTagOrganizerCommand", "Arrange selected or visible duct, pipe and cable-tray tags with ordered heads and orthogonal leader elbows.", null, "stack"),
+                    RibbonHelper.CreatePushButtonData("MepSelectTags", "MEP Select", "AlignTool.Commands.MepSelectTagsCommand", "Select duct, pipe and cable-tray tags in the active view.", null, "select_all"),
+                    RibbonHelper.CreatePushButtonData("MepTagAudit", "MEP Audit", "AlignTool.Commands.MepTagAuditCommand", "Report MEP tag counts, pinned tags and tags without leaders.", null, "audit"));
+
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
             }

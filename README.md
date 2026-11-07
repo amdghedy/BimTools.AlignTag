@@ -106,6 +106,10 @@ The first Annotation Manager layer adds geometry-based operations for selected *
 Collision clearance is configurable in BIM TOOLS → TAG TOOLS → Settings and defaults to 2 mm. The preview lists affected element IDs and proposed move distances; the audit report lists detected overlap pairs. The audit is a geometric screening tool, not a semantic checker: bounding-box intersections can include intentional overlaps and cannot prove that leaders, dimension witness lines, text readability, or plotted output are correct. Re-run Audit after applying a plan and visually review the view. Every move is performed in a Revit transaction with per-element failure isolation.
 
 The manager uses Revit view-specific bounding boxes and ElementTransformUtils.MoveElement; it does not rewrite dimension references or text content. Leader elbow/endpoint optimization, MEP-host-aware placement, configurable rule profiles, persistent audit reports and a richer graphical preview remain planned work and are not claimed as complete in this phase.
+### MEP TAG ORGANIZER
+
+**MEP Organize** works on selected MEP tags, or all supported MEP tags in the active view when nothing is selected. It recognizes duct, flex-duct, pipe, flex-pipe, cable-tray and conduit tags (including common fittings), skips pinned tags, sorts tag heads by host location in active-view coordinates, spaces the heads into side-based columns, and attempts to set orthogonal leader elbows while retaining each tag-to-host reference. A preview is shown before applying changes. **MEP Select** selects eligible tags; **MEP Audit** reports eligible, pinned and leaderless tag counts. The organizer is a deterministic layout heuristic: it reduces leader crossings but cannot guarantee a collision-free result for every dense or multi-reference view. Review the result in Revit 2020 after applying; no model geometry or MEP system parameters are changed.
+
 ### ARRANGE
 Stack (uncross) · Left Col · Right Col · Untangle · Flip · Parallel · Eq Offset · Match Len · Minimize
 
