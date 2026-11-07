@@ -100,6 +100,10 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("IntelligentCsdOptimizer", "CSD Optimize", "AlignTool.Commands.IntelligentCsdOptimizerCommand", "Extract native MEP connector envelopes, generate ranked section arrangements and review/export candidates without modifying the model.", null, "stack"),
                     RibbonHelper.CreatePushButtonData("Revit3DCoordination", "3D Coord", "AlignTool.Commands.Revit3DCoordinationCommand", "Extract linked/native MEP solids, insulation and connectors; run native Boolean clash screening and inspect results read-only.", null, "3d"),
                     RibbonHelper.CreatePushButtonData("MepCsdHelp", "CSD Guide", "AlignTool.Commands.AboutCommand", "Open BIM TOOLS ALIGN information and usage guidance.", null, "about"));
+                RibbonHelper.AddPushButton(pMep, "CorridorSectionWorkspace", "Corridor Sections",
+                    "AlignTool.Commands.CorridorSectionWorkspaceCommand",
+                    "Generate actual solid cross-sections at configurable corridor stations; read-only review.",
+                    null, "3d");
 
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
