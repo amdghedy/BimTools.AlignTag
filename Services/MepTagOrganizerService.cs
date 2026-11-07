@@ -8,13 +8,16 @@ using Autodesk.Revit.DB;
 namespace AlignTool.Services
 {
     /// <summary>
-    /// View-aware arrangement for duct, pipe, cable-tray and conduit IndependentTags.
-    /// Only annotation heads and leader elbows are changed; hosts and system data are untouched.
+    /// Arranges MEP tags in active-view coordinates. Tag heads are stacked in stable
+    /// host-endpoint order; each leader elbow is placed at its own tag row to avoid
+    /// the shared vertical elbow rail used by the first implementation.
     /// </summary>
     public static class MepTagOrganizerService
     {
         private const double DefaultGapMm = 8.0;
         private const double MinimumHeadHeightMm = 12.0;
+        private const double MinimumHeadWidthMm = 25.0;
+        private const double DefaultSideOffsetMm = 50.0;
 
         public sealed class TagPlan
         {
@@ -36,6 +39,7 @@ namespace AlignTool.Services
             public int Moved;
             public int Failed;
             public int ElbowsSet;
+            public int ElbowFailures;
             public IList<TagPlan> Plan = new List<TagPlan>();
         }
 
@@ -63,10 +67,11 @@ namespace AlignTool.Services
         {
             var result = new List<IndependentTag>();
             if (doc == null || view == null) return result;
+
             foreach (IndependentTag tag in new FilteredElementCollector(doc, view.Id)
                 .OfClass(typeof(IndependentTag)).Cast<IndependentTag>())
             {
-                if (GetMepLeaderReference(tag, doc) != null || IsMepHost(doc.GetElement(AlignTool.Models.TagInfo.GetHostIdSafe(tag))))
+                if (GetMepLeaderReference(tag, doc) != null)
                     result.Add(tag);
             }
             return result;
@@ -90,6 +95,7 @@ namespace AlignTool.Services
                 }
             }
             catch { }
+
             try
             {
                 Element host = doc.GetElement(AlignTool.Models.TagInfo.GetHostIdSafe(tag));
@@ -110,16 +116,23 @@ namespace AlignTool.Services
             XYZ origin = view.Origin;
             var records = new List<Record>();
 
-            foreach (IndependentTag tag in input.Where(x => x != null).GroupBy(x => x.Id.IntegerValue).Select(g => g.First()))
+            foreach (IndependentTag tag in input.Where(x => x != null)
+                .GroupBy(x => x.Id.IntegerValue).Select(g => g.First()))
             {
                 Reference reference = GetMepLeaderReference(tag, doc);
                 if (reference == null) continue;
+
                 summary.Eligible++;
-                if (tag.Pinned) { summary.Pinned++; continue; }
+                if (tag.Pinned)
+                {
+                    summary.Pinned++;
+                    continue;
+                }
 
                 XYZ head = tag.TagHeadPosition;
                 XYZ anchor = GetLeaderEnd(tag, reference, doc, view);
-                if (anchor == null) anchor = GetHostCenter(doc.GetElement(reference.ElementId), view);
+                if (anchor == null)
+                    anchor = GetHostCenter(doc.GetElement(reference.ElementId), view);
                 if (anchor == null) anchor = head;
 
                 bool hasLeader = false;
@@ -132,24 +145,22 @@ namespace AlignTool.Services
                 double ax = (anchor - origin).DotProduct(right);
                 double ay = (anchor - origin).DotProduct(up);
                 double hostDepth = (anchor - origin).DotProduct(normal);
-
-                double height = MinimumHeadHeightMm / 304.8;
-                try
-                {
-                    BoundingBoxXYZ box = tag.get_BoundingBox(view);
-                    if (box != null)
-                    {
-                        double projected = Math.Abs((box.Max.Y - box.Min.Y));
-                        if (projected > 1e-5) height = Math.Max(height, projected);
-                    }
-                }
-                catch { }
+                double width, height;
+                GetProjectedTagSize(tag, view, right, up, out width, out height);
 
                 records.Add(new Record
                 {
-                    Tag = tag, Reference = reference, HeadX = hx, HeadY = hy,
-                    AnchorX = ax, AnchorY = ay, Depth = depth, HostDepth = hostDepth,
-                    Height = height, HasLeader = hasLeader,
+                    Tag = tag,
+                    Reference = reference,
+                    HeadX = hx,
+                    HeadY = hy,
+                    AnchorX = ax,
+                    AnchorY = ay,
+                    Depth = depth,
+                    HostDepth = hostDepth,
+                    Width = width,
+                    Height = height,
+                    HasLeader = hasLeader,
                     Side = hx <= ax ? "Left" : "Right"
                 });
             }
@@ -157,52 +168,89 @@ namespace AlignTool.Services
             summary.Movable = records.Count;
             if (records.Count == 0) return summary;
 
-            double minAnchorX = records.Min(x => x.AnchorX);
-            double maxAnchorX = records.Max(x => x.AnchorX);
-            double minHeadX = records.Min(x => x.HeadX);
-            double maxHeadX = records.Max(x => x.HeadX);
-            double leftLane = records.Where(x => x.Side == "Left").Select(x => x.HeadX).DefaultIfEmpty(minAnchorX - MmToFeet(50)).Average();
-            double rightLane = records.Where(x => x.Side == "Right").Select(x => x.HeadX).DefaultIfEmpty(maxAnchorX + MmToFeet(50)).Average();
             double gap = MmToFeet(DefaultGapMm);
-            double maxHeight = records.Max(x => x.Height);
-            double rowSpacing = Math.Max(MmToFeet(25), maxHeight + gap);
+            double sideOffset = MmToFeet(DefaultSideOffsetMm);
+            double leftAnchor = records.Where(x => x.Side == "Left")
+                .Select(x => x.AnchorX).DefaultIfEmpty(records.Average(x => x.AnchorX)).Average();
+            double rightAnchor = records.Where(x => x.Side == "Right")
+                .Select(x => x.AnchorX).DefaultIfEmpty(records.Average(x => x.AnchorX)).Average();
+
+            double leftLane = records.Where(x => x.Side == "Left")
+                .Select(x => x.HeadX).DefaultIfEmpty(leftAnchor - sideOffset).Average();
+            double rightLane = records.Where(x => x.Side == "Right")
+                .Select(x => x.HeadX).DefaultIfEmpty(rightAnchor + sideOffset).Average();
+
+            double leftWidth = records.Where(x => x.Side == "Left")
+                .Select(x => x.Width).DefaultIfEmpty(MmToFeet(MinimumHeadWidthMm)).Max();
+            double rightWidth = records.Where(x => x.Side == "Right")
+                .Select(x => x.Width).DefaultIfEmpty(MmToFeet(MinimumHeadWidthMm)).Max();
+            double centreX = records.Average(x => x.AnchorX);
+            double requiredHalfGap = (leftWidth + rightWidth) * 0.5 + gap;
+
+            if (leftLane >= rightLane)
+            {
+                leftLane = centreX - requiredHalfGap * 0.5;
+                rightLane = centreX + requiredHalfGap * 0.5;
+            }
+            else if (rightLane - leftLane < requiredHalfGap)
+            {
+                double laneCentre = (leftLane + rightLane) * 0.5;
+                leftLane = laneCentre - requiredHalfGap * 0.5;
+                rightLane = laneCentre + requiredHalfGap * 0.5;
+            }
 
             foreach (string side in new[] { "Left", "Right" })
             {
                 List<Record> lane = records.Where(x => x.Side == side)
-                    .OrderByDescending(x => x.AnchorY).ThenBy(x => x.AnchorX).ToList();
+                    .OrderByDescending(x => x.AnchorY)
+                    .ThenBy(x => x.AnchorX)
+                    .ThenBy(x => x.Tag.Id.IntegerValue)
+                    .ToList();
                 if (lane.Count == 0) continue;
 
-                double centreY = lane.Average(x => x.AnchorY);
-                double startY = centreY + (lane.Count - 1) * rowSpacing * 0.5;
+                double totalHeight = lane.Sum(x => x.Height) + gap * Math.Max(0, lane.Count - 1);
+                double cursorY = lane.Average(x => x.AnchorY) + totalHeight * 0.5;
                 double laneX = side == "Left" ? leftLane : rightLane;
 
-                for (int i = 0; i < lane.Count; i++)
+                foreach (Record item in lane)
                 {
-                    Record item = lane[i];
-                    double targetY = startY - i * rowSpacing;
+                    double targetY = cursorY - item.Height * 0.5;
+                    cursorY = targetY - item.Height * 0.5 - gap;
+
                     XYZ newHead = origin + right * laneX + up * targetY + normal * item.Depth;
-                    XYZ elbow = origin + right * laneX + up * item.AnchorY + normal * item.HostDepth;
+
+                    // One elbow per leader: keep its Y on the unique tag row and its X
+                    // at the actual leader endpoint. Ordered endpoint/row pairs prevent
+                    // the avoidable crossings caused by a common elbow column.
+                    XYZ elbow = origin + right * item.AnchorX + up * targetY + normal * item.HostDepth;
+
                     summary.Plan.Add(new TagPlan
                     {
-                        Tag = item.Tag, Head = newHead, Elbow = elbow,
-                        LeaderReference = item.Reference, Side = side,
-                        HostY = item.AnchorY, HasLeader = item.HasLeader
+                        Tag = item.Tag,
+                        Head = newHead,
+                        Elbow = elbow,
+                        LeaderReference = item.Reference,
+                        Side = side,
+                        HostY = item.AnchorY,
+                        HasLeader = item.HasLeader
                     });
                 }
             }
+
             return summary;
         }
 
         public static ResultSummary Apply(Document doc, ResultSummary summary)
         {
             if (doc == null || summary == null || summary.Plan == null) return summary;
+
             using (Transaction tx = new Transaction(doc, "BIM TOOLS - MEP Tag Organizer"))
             {
                 tx.Start();
                 foreach (TagPlan item in summary.Plan)
                 {
                     if (item == null || item.Tag == null || item.Tag.Pinned) continue;
+
                     using (SubTransaction sub = new SubTransaction(doc))
                     {
                         try
@@ -210,8 +258,15 @@ namespace AlignTool.Services
                             sub.Start();
                             item.Tag.TagHeadPosition = item.Head;
                             summary.Moved++;
-                            if (item.HasLeader && TrySetLeaderElbow(item.Tag, item.LeaderReference, item.Elbow))
-                                summary.ElbowsSet++;
+
+                            if (item.HasLeader)
+                            {
+                                if (TrySetLeaderElbow(item.Tag, item.LeaderReference, item.Elbow))
+                                    summary.ElbowsSet++;
+                                else
+                                    summary.ElbowFailures++;
+                            }
+
                             sub.Commit();
                         }
                         catch
@@ -223,6 +278,7 @@ namespace AlignTool.Services
                 }
                 tx.Commit();
             }
+
             return summary;
         }
 
@@ -234,7 +290,49 @@ namespace AlignTool.Services
                 "\nPinned (skipped): " + r.Pinned +
                 "\nLeaderless: " + r.Leaderless +
                 "\nPlanned head moves: " + (r.Plan == null ? 0 : r.Plan.Count) +
-                "\n\nHeads are ordered by host position and arranged in left/right columns. Leader elbows are adjusted where the Revit API permits. This is a best-effort layout; review dense areas and multi-reference tags after applying.";
+                "\n\nTag heads are stacked by leader endpoint elevation with measured tag-box spacing. Each leader elbow is assigned to its own row. The routing minimizes avoidable crossings for ordered endpoints; inspect cases with coincident endpoints, multi-reference tags or constrained leaders.";
+        }
+
+        private static void GetProjectedTagSize(IndependentTag tag, View view,
+            XYZ right, XYZ up, out double width, out double height)
+        {
+            width = MmToFeet(MinimumHeadWidthMm);
+            height = MmToFeet(MinimumHeadHeightMm);
+
+            try
+            {
+                BoundingBoxXYZ box = tag.get_BoundingBox(view);
+                if (box == null) return;
+
+                Transform transform = box.Transform;
+                if (transform == null) transform = Transform.Identity;
+
+                double minX = double.MaxValue;
+                double maxX = double.MinValue;
+                double minY = double.MaxValue;
+                double maxY = double.MinValue;
+
+                for (int ix = 0; ix < 2; ix++)
+                for (int iy = 0; iy < 2; iy++)
+                for (int iz = 0; iz < 2; iz++)
+                {
+                    XYZ local = new XYZ(
+                        ix == 0 ? box.Min.X : box.Max.X,
+                        iy == 0 ? box.Min.Y : box.Max.Y,
+                        iz == 0 ? box.Min.Z : box.Max.Z);
+                    XYZ world = transform.OfPoint(local);
+                    double x = world.DotProduct(right);
+                    double y = world.DotProduct(up);
+                    minX = Math.Min(minX, x);
+                    maxX = Math.Max(maxX, x);
+                    minY = Math.Min(minY, y);
+                    maxY = Math.Max(maxY, y);
+                }
+
+                if (maxX - minX > 1e-5) width = Math.Max(width, maxX - minX);
+                if (maxY - minY > 1e-5) height = Math.Max(height, maxY - minY);
+            }
+            catch { }
         }
 
         private static XYZ GetLeaderEnd(IndependentTag tag, Reference reference, Document doc, View view)
@@ -242,9 +340,14 @@ namespace AlignTool.Services
             try
             {
                 MethodInfo method = tag.GetType().GetMethod("GetLeaderEnd", new[] { typeof(Reference) });
-                if (method != null) return method.Invoke(tag, new object[] { reference }) as XYZ;
+                if (method != null)
+                {
+                    XYZ point = method.Invoke(tag, new object[] { reference }) as XYZ;
+                    if (point != null) return point;
+                }
             }
             catch { }
+
             try { return AlignTool.Models.TagInfo.GetLeaderEndSafe(tag, doc, view, out _); }
             catch { return null; }
         }
@@ -270,7 +373,7 @@ namespace AlignTool.Services
                 if (host.Location is LocationPoint lp) return lp.Point;
                 if (host.Location is LocationCurve lc) return lc.Curve.Evaluate(0.5, true);
                 BoundingBoxXYZ box = host.get_BoundingBox(view);
-                if (box != null) return (box.Min + box.Max) * 0.5;
+                if (box != null) return box.Transform.OfPoint((box.Min + box.Max) * 0.5);
             }
             catch { }
             return null;
@@ -282,7 +385,14 @@ namespace AlignTool.Services
         {
             public IndependentTag Tag;
             public Reference Reference;
-            public double HeadX, HeadY, AnchorX, AnchorY, Depth, HostDepth, Height;
+            public double HeadX;
+            public double HeadY;
+            public double AnchorX;
+            public double AnchorY;
+            public double Depth;
+            public double HostDepth;
+            public double Width;
+            public double Height;
             public bool HasLeader;
             public string Side;
         }
