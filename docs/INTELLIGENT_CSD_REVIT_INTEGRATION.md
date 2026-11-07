@@ -9,19 +9,19 @@ The ALIGN ribbon now includes **CSD Optimize**. The command is read-only and tar
 3. Reads rectangular, oval and round connector envelopes where available. Round connector diameter is converted to a square section envelope.
 4. Uses built-in width/height/diameter parameters as a fallback when connector dimensions are unavailable.
 5. Creates candidate arrangements using the existing knowledge-based packing engine.
-6. Presents ranked options, clash/clearance/rule metrics and per-element proposed positions in a review window.
+6. Presents ranked options, clash/clearance/rule metrics, per-element proposed positions, and a colour-coded schematic preview of the solver's 2D packing result.
 7. Records engineer grades in the current session, reports NDCG@5, and exports the selected candidate to CSV.
 
 ## Safety boundary
 
 This increment does **not** move, rotate, resize, disconnect, reconnect, or recreate any Revit MEP element. The window is an analysis/review surface only. Exported positions are solver coordinates in millimetres, not a command to modify model geometry.
 
-The extraction adapter traverses loaded RevitLinkInstance documents, applies each link's total transform to element centres and connector coordinate frames, and prefixes element identifiers with the link instance identity. When the active view crop is active, linked element centres are filtered against the transformed crop-box bounds. Unloadable links are skipped. Connector envelope dimensions are used as packing rectangles; complex fitting geometry, insulation, lining, slope, access zones, supports, hanger clearances, fire-stopping and maintenance zones are not yet fully modelled.
+The extraction adapter traverses loaded RevitLinkInstance documents, applies each link's total transform to element centres and connector coordinate frames, and prefixes element identifiers with the link instance identity. The review window now draws a colour-coded schematic section preview for each selected candidate, with tooltips and a discipline legend. This preview visualizes the packing engine's abstract 2D placements; it is not yet a projection of complete duct/pipe/tray route solids. When the active view crop is active, linked element centres are filtered against the transformed crop-box bounds. Unloadable links are skipped. Connector envelope dimensions are used as packing rectangles; complex fitting geometry, insulation, lining, slope, access zones, supports, hanger clearances, fire-stopping and maintenance zones are not yet fully modelled.
 
 ## Engineering limitations to resolve before construction use
 
 - Improve linked-model extraction with robust visibility/crop-shape filtering, unloaded-link diagnostics, source document version tracking and linked-model performance tests.
-- Build a true section-plane projection and route-aware grouping for long ducts/pipes/trays, not just connector-envelope packing.
+- Replace the schematic packing preview with a true section-plane projection of duct/pipe/tray route solids, including route-aware grouping for long runs.
 - Add system-specific rules, project profiles, code/standard checks, insulation and fitting envelopes.
 - Add multi-section corridor continuity and utility crossover handling.
 - Add independent geometry-based clash validation and engineer-approved application workflow with transaction rollback.
