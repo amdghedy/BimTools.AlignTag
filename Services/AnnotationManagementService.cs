@@ -163,7 +163,7 @@ namespace AlignTool.Services
                         {
                             double shift = (working[j].Bottom - gap) - current.Top;
                             if (shift >= -1e-8) shift = -Math.Max(gap, MmToFeet(2));
-                            Shift(current, view.UpDirection * shift);
+                            Shift(current, view.UpDirection * shift, view);
                             totalShift += shift;
                             collision = true;
                             break;
@@ -262,11 +262,11 @@ namespace AlignTool.Services
                 Bottom = x.Bottom, Top = x.Top, Kind = x.Kind, Pinned = x.Pinned };
         }
 
-        private static void Shift(Item item, XYZ delta)
+        private static void Shift(Item item, XYZ delta, View view)
         {
-            double dx = delta.X, dy = delta.Y;
-            // The working rectangles use view-axis coordinates. Project the shift onto
-            // those axes when updating the simulated plan.
+            // Rectangles are stored in view-axis coordinates, not world X/Y.
+            double dx = delta.DotProduct(view.RightDirection);
+            double dy = delta.DotProduct(view.UpDirection);
             item.Left += dx; item.Right += dx;
             item.Bottom += dy; item.Top += dy;
             item.Center += delta;
