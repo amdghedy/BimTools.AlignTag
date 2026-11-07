@@ -322,7 +322,7 @@ namespace AlignTool.Commands
                 else
                 {
                     var audit = AnnotationManagementService.Audit(uidoc.Document, uidoc.Document.ActiveView, elements);
-                    plan = AnnotationManagementService.PlanCollisionResolution(audit, uidoc.Document.ActiveView, 2.0);
+                    plan = AnnotationManagementService.PlanCollisionResolution(audit, uidoc.Document.ActiveView, SettingsService.Instance.Current.AnnotationCollisionGapMm);
                     TaskDialogResult answer = TaskDialog.Show(title,
                         AnnotationManagementService.Describe(audit) + "\n\n" + AnnotationManagementService.Preview(plan) +
                         "\n\nApply the proposed collision resolution?", TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
