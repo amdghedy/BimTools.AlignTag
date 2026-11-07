@@ -11,5 +11,6 @@ namespace AlignTool.Models
         public double MaxMoveMm { get; set; } = 1200;
         public double MinHeadDistanceMm { get; set; } = 40;
         public double MinimizeLeaderMm { get; set; } = 150;
+        public double AnnotationCollisionGapMm { get; set; } = 2.0;
     }
 }
