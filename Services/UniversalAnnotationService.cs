@@ -284,4 +284,28 @@ namespace AlignTool.Commands
     [Transaction(TransactionMode.Manual)]
     public class UniversalDistributeVerticalCommand : IExternalCommand
     { public Result Execute(ExternalCommandData c, ref string m, ElementSet e) => UniversalAlignRunner.Run(c, ref m, null, false, "Universal Distribute Vertical"); }
+
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalSelectAllTagsInViewCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
+        {
+            UIDocument uidoc = c.Application.ActiveUIDocument;
+            Document doc = uidoc == null ? null : uidoc.Document;
+            if (doc == null) { m = "No active document."; return Result.Failed; }
+            try
+            {
+                IList<Element> tags = UniversalAnnotationService.GetAllInView(doc, doc.ActiveView);
+                uidoc.Selection.SetElementIds(tags.Select(x => x.Id).ToList());
+                TaskDialog.Show("Universal Tags", tags.Count + " supported annotation tag(s) selected in the active view.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                m = ex.Message;
+                AlignTool.Helpers.Logger.Error("Select all universal tags failed", ex);
+                return Result.Failed;
+            }
+        }
+    }
 }
