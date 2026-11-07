@@ -96,11 +96,12 @@ namespace AlignTool.UI
             AddColumn(_candidateGrid, "Clearance", "ClearanceViolations", 75);
             AddColumn(_candidateGrid, "Rules", "RuleViolations", 55);
             AddColumn(_candidateGrid, "Solid clashes", "SolidProfileClashes", 75);
+            AddColumn(_candidateGrid, "Solid boundary", "GeometryBoundaryViolations", 75);
             AddColumn(_candidateGrid, "Profiles", "GeometryCoverage", 70);
             AddColumn(_candidateGrid, "Geometry check", "GeometryStatus", 160);
             _candidateGrid.SelectionChanged += CandidateChanged;
             IList<CsdSectionGeometryValidator.CandidateCheck> geometryChecks =
-                CsdSectionGeometryValidator.Validate(solve.Candidates, extraction);
+                CsdSectionGeometryValidator.Validate(solve.Candidates, extraction, constraints);
             _candidateGrid.ItemsSource = solve.Candidates.Select(candidate =>
                 new CandidateRow(candidate, geometryChecks.FirstOrDefault(x =>
                     string.Equals(x.CandidateId, candidate.Id, StringComparison.OrdinalIgnoreCase)))).ToList();
@@ -426,6 +427,7 @@ namespace AlignTool.UI
             public int RuleViolations { get { return Candidate.RuleViolations; } }
             private readonly CsdSectionGeometryValidator.CandidateCheck _geometry;
             public int SolidProfileClashes { get { return _geometry == null ? 0 : _geometry.SolidProfileClashes; } }
+            public int GeometryBoundaryViolations { get { return _geometry == null ? 0 : _geometry.GeometryBoundaryViolations; } }
             public string GeometryCoverage { get { return _geometry == null ? "N/A" : _geometry.GeometryItemsMatched + "/" + (_geometry.GeometryItemsMatched + _geometry.GeometryItemsMissing); } }
             public string GeometryStatus { get { return _geometry == null ? "Not checked" : _geometry.Status; } }
             public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate,
