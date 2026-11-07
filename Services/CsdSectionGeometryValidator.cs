@@ -85,7 +85,7 @@ namespace AlignTool.Services
                     var moved = new ServiceShape { Id = source.Id };
                     foreach (PolygonData polygon in source.Polygons)
                     {
-                        var movedPolygon = new PolygonData { ServiceId = polygon.ServiceId, Points = new List<Point2>() };
+                        var movedPolygon = new PolygonData { ServiceId = polygon.ServiceId, IsHole = polygon.IsHole, Points = new List<Point2>() };
                         foreach (Point2 point in polygon.Points)
                         {
                             double movedX = point.X - originX + dx;
