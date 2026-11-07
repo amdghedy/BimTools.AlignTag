@@ -57,6 +57,20 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("AlignToolSettings", "Settings", "AlignTool.Commands.ShowSettingsCommand", "Settings.", null, "settings"));
                 RibbonHelper.AddPushButton(pTag, "AlignToolAbout", "About", "AlignTool.Commands.AboutCommand", "About.", null, "about");
 
+                RibbonPanel pUniversal = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "UNIVERSAL ALIGN");
+                RibbonHelper.AddStackedTriple(pUniversal,
+                    RibbonHelper.CreatePushButtonData("UniversalAlignLeft", "Left", "AlignTool.Commands.UniversalAlignLeftCommand", "Align any supported tag head to the left in the active view.", null, "align_left"),
+                    RibbonHelper.CreatePushButtonData("UniversalAlignCenter", "Center", "AlignTool.Commands.UniversalAlignCenterCommand", "Center supported tag heads in the active view.", null, "align_center"),
+                    RibbonHelper.CreatePushButtonData("UniversalAlignRight", "Right", "AlignTool.Commands.UniversalAlignRightCommand", "Align any supported tag head to the right in the active view.", null, "align_right"));
+                RibbonHelper.AddStackedTriple(pUniversal,
+                    RibbonHelper.CreatePushButtonData("UniversalAlignTop", "Top", "AlignTool.Commands.UniversalAlignTopCommand", "Align supported tag heads to the top in the active view.", null, "align_top"),
+                    RibbonHelper.CreatePushButtonData("UniversalAlignMiddle", "Middle", "AlignTool.Commands.UniversalAlignMiddleCommand", "Align supported tag heads to the vertical middle.", null, "align_middle"),
+                    RibbonHelper.CreatePushButtonData("UniversalAlignBottom", "Bottom", "AlignTool.Commands.UniversalAlignBottomCommand", "Align supported tag heads to the bottom.", null, "align_bottom"));
+                RibbonHelper.AddStackedTriple(pUniversal,
+                    RibbonHelper.CreatePushButtonData("UniversalDistH", "Dist H", "AlignTool.Commands.UniversalDistributeHorizontalCommand", "Evenly distribute supported tags along the view horizontal axis.", null, "dist_h"),
+                    RibbonHelper.CreatePushButtonData("UniversalDistV", "Dist V", "AlignTool.Commands.UniversalDistributeVerticalCommand", "Evenly distribute supported tags along the view vertical axis.", null, "dist_v"),
+                    RibbonHelper.CreatePushButtonData("UniversalTagInfo", "Info", "AlignTool.Commands.AboutCommand", "About universal annotation alignment.", null, "about"));
+
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
             }
