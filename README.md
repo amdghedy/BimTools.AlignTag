@@ -86,9 +86,9 @@ CI workflow: `.github/workflows/dotnet-desktop.yml` (runs on pushes and pull req
 Left · Center · Right · Top · Middle · Bottom · Dist H · Dist V · To Line
 
 ### UNIVERSAL ALIGN
-Left · Center · Right · Top · Middle · Bottom · Dist H · Dist V · All View
+Left · Center · Right · Top · Middle · Bottom · Dist H · Dist V · All View · Match H · Match V
 
-Universal alignment detects supported annotation elements through their writable `TagHeadPosition` API property instead of requiring `IndependentTag`. It supports IndependentTag-based family tags and the Revit RoomTag, AreaTag and SpaceTag classes when the active Revit API exposes that property. Alignment and distribution are calculated in the active view's right/up coordinate system, so rotated plans and sections are handled correctly. Pinned elements are skipped. Select tags first, or pick them when prompted. **All View** selects every supported tag in the active view so it can be used as the input for the alignment commands.
+Universal alignment detects supported annotation elements through their writable `TagHeadPosition` API property instead of requiring `IndependentTag`. It supports IndependentTag-based family tags and the Revit RoomTag, AreaTag and SpaceTag classes when the active Revit API exposes that property. Alignment and distribution are calculated in the active view's right/up coordinate system, so rotated plans and sections are handled correctly. Pinned elements are skipped. Select tags first, or pick them when prompted. **All View** selects every supported tag in the active view so it can be used as the input for the alignment commands. **Match H** and **Match V** use the first selected tag as the master and align the remaining tag heads to its view-horizontal or view-vertical coordinate.
 
 The universal commands intentionally move tag heads only. They do not claim to normalize leader geometry for spatial tags or to align dimensions, text notes, symbols, or arbitrary model elements.
 
