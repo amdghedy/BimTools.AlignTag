@@ -96,6 +96,10 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("MepTagOrganizer", "MEP Organize", "AlignTool.Commands.MepTagOrganizerCommand", "Arrange selected or visible duct, pipe and cable-tray tags with ordered heads and orthogonal leader elbows.", null, "stack"),
                     RibbonHelper.CreatePushButtonData("MepSelectTags", "MEP Select", "AlignTool.Commands.MepSelectTagsCommand", "Select duct, pipe and cable-tray tags in the active view.", null, "select_all"),
                     RibbonHelper.CreatePushButtonData("MepTagAudit", "MEP Audit", "AlignTool.Commands.MepTagAuditCommand", "Report MEP tag counts, pinned tags and tags without leaders.", null, "audit"));
+                RibbonHelper.AddStackedTriple(pMep,
+                    RibbonHelper.CreatePushButtonData("IntelligentCsdOptimizer", "CSD Optimize", "AlignTool.Commands.IntelligentCsdOptimizerCommand", "Extract native MEP connector envelopes, generate ranked section arrangements and review/export candidates without modifying the model.", null, "stack"),
+                    RibbonHelper.CreatePushButtonData("MepCsdHelp", "CSD Guide", "AlignTool.Commands.AboutCommand", "Open BIM TOOLS ALIGN information and usage guidance.", null, "about"),
+                    RibbonHelper.CreatePushButtonData("MepCsdAudit", "CSD Audit", "AlignTool.Commands.MepTagAuditCommand", "Audit supported MEP tags in the active view.", null, "audit"));
 
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
