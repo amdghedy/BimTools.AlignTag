@@ -57,3 +57,32 @@ Added `Services/Csd3DCoordinationEngine.cs`, a Revit-independent analysis core:
 ### Scope boundary
 
 This is the analysis-engine foundation, not the completed Revit integration. It does not yet extract full routed solids, fitting bodies, connector graphs or access zones from a live Revit model, and it does not yet drive candidate movements through a 3D route solver. Its narrow phase is a swept-envelope centreline-distance calculation, not Boolean intersection of native Revit solids. Section checks report route presence at defined planes, not reconstructed solid sections. Those model adapters, candidate geometry transforms and Revit 2020 model-based validation remain the next tasks. No Revit elements are modified.
+
+
+## Live Revit 2020 3D geometry extraction
+
+The ALIGN ribbon includes a read-only **3D Coord** command backed by `Revit3DCoordinationExtractionService`:
+- Native solids for supported ducts, pipes, fittings, accessories, cable trays, conduits and MEP equipment.
+- Loaded linked-model geometry transformed into host coordinates, with active-view crop-box filtering.
+- Attached duct/pipe insulation and lining solids.
+- Connector inventories, domains, shapes, connected states and connector references resolved across scanned host/linked documents.
+- Element bounds expanded using extracted solid bounds, including insulation/lining.
+- Broad-phase element and solid AABB filtering followed by native `BooleanOperationsUtils.ExecuteBooleanOperation(..., Intersect)` checks.
+- Intersection volume in mm³, primary/insulation/lining geometry provenance, Boolean failures and extraction diagnostics.
+
+The WPF review is read-only: no Revit transaction is started and no model elements are modified.
+
+### Remaining work
+
+- Interactive multi-section corridor station editor and true section-profile comparison.
+- Project-specific maintenance/access zones and clearance-rule profiles.
+- Candidate optimization driven by measured 3D solids and candidate displacement transforms.
+- Persistent engineer approval/audit records, followed by a separately designed transaction-controlled apply stage.
+
+### Known limitations
+
+- A clash row reports the maximum intersecting solid-pair volume for an element pair, not the sum of all overlapping solid pairs.
+- Intentional fitting-to-fitting and fitting-to-curve junctions still need classification to avoid treating legitimate connection contacts as clashes.
+- Connector links are resolved from `Connector.AllRefs`; unresolved references are surfaced, but expected open-end rules and connector-direction compatibility are not yet implemented.
+- Extraction is based on the active view/selection and loaded links. Large federated models may require spatial indexing and incremental processing.
+- Revit 2020 runtime validation with representative project models remains required before production use.

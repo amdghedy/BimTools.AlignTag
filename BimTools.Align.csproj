@@ -77,6 +77,9 @@
     <Compile Include="Services\RevitCsdExtractionService.cs" />
     <Compile Include="Services\CsdSectionGeometryValidator.cs" />
     <Compile Include="Services\Csd3DCoordinationEngine.cs" />
+    <Compile Include="Services\Revit3DCoordinationExtractionService.cs" />
+    <Compile Include="Commands\Revit3DCoordinationCommand.cs" />
+    <Compile Include="UI\Revit3DCoordinationWindow.cs" />
     <Compile Include="Commands\IntelligentCsdOptimizerCommand.cs" />
     <Compile Include="UI\CsdOptimizerWindow.cs" />
     <Compile Include="Commands\StraightenLeadersCommand.cs" />
