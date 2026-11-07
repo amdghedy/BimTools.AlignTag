@@ -311,7 +311,7 @@ namespace AlignTool.Services
             }
             if (selected == null) return result;
 
-            double outerSign = 0;
+            var rawContours = new List<Tuple<IList<XYZ>, double>>();
             foreach (EdgeArray edgeLoop in selected.EdgeLoops)
             {
                 var points = new List<XYZ>();
@@ -332,11 +332,24 @@ namespace AlignTool.Services
                 }
                 if (points.Count > 1 && points[0].DistanceTo(points[points.Count - 1]) < 1e-5)
                     points.RemoveAt(points.Count - 1);
-                if (points.Count < 3) continue;
-                double area = SignedArea(points, origin, right, up);
-                if (Math.Abs(outerSign) < 1e-9) outerSign = area;
-                bool hole = Math.Abs(outerSign) > 1e-9 && area * outerSign < 0;
-                result.Add(new Contour { PointsHost = points, IsHole = hole, AreaMm2 = area });
+                if (points.Count >= 3)
+                    rawContours.Add(Tuple.Create((IList<XYZ>)points, SignedArea(points, origin, right, up)));
+            }
+
+            // Revit edge-loop enumeration order is not a reliable outer/inner-loop contract.
+            // Use the largest absolute loop as the outer boundary, then classify opposite winding as holes.
+            double outerSign = rawContours.OrderByDescending(x => Math.Abs(x.Item2))
+                .Select(x => Math.Sign(x.Item2)).FirstOrDefault();
+            foreach (var raw in rawContours)
+            {
+                bool hole = outerSign != 0 && Math.Sign(raw.Item2) != 0 &&
+                    Math.Sign(raw.Item2) != outerSign;
+                result.Add(new Contour
+                {
+                    PointsHost = raw.Item1,
+                    IsHole = hole,
+                    AreaMm2 = raw.Item2
+                });
             }
             return result;
         }
