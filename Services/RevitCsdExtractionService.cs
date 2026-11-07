@@ -13,6 +13,7 @@ namespace AlignTool.Services
         public sealed class ExtractionResult
         {
             public IList<KnowledgeBasedCsdEngine.ServiceItem> Items { get; set; }
+            public IList<SectionProjectionItem> SectionItems { get; set; }
             public double MinXmm { get; set; }
             public double MaxXmm { get; set; }
             public double MinYmm { get; set; }
@@ -20,7 +21,24 @@ namespace AlignTool.Services
             public int ConnectorCount { get; set; }
             public int ElementsWithoutConnectors { get; set; }
             public int SkippedElements { get; set; }
+            public int ElementsTestedForSection { get; set; }
+            public int SectionIntersections { get; set; }
+            public int ElementsOutsideSection { get; set; }
             public string SourceDescription { get; set; }
+        }
+
+        /// <summary>Measured view-plane projection; route centreline/profile or conservative fitting/equipment bounding envelope.</summary>
+        public sealed class SectionProjectionItem
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string Discipline { get; set; }
+            public double CenterXmm { get; set; }
+            public double CenterYmm { get; set; }
+            public double WidthMm { get; set; }
+            public double HeightMm { get; set; }
+            public double PlaneOffsetMm { get; set; }
+            public string ProjectionMethod { get; set; }
         }
 
         public static ExtractionResult Extract(Document doc, View view, IEnumerable<ElementId> selectedIds)
@@ -87,7 +105,7 @@ namespace AlignTool.Services
                 catch { }
             }
 
-            var result = new ExtractionResult { Items = new List<KnowledgeBasedCsdEngine.ServiceItem>() };
+            var result = new ExtractionResult { Items = new List<KnowledgeBasedCsdEngine.ServiceItem>(), SectionItems = new List<SectionProjectionItem>() };
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             XYZ right = view.RightDirection.Normalize();
             XYZ up = view.UpDirection.Normalize();
@@ -125,6 +143,18 @@ namespace AlignTool.Services
                     height = Math.Max(10, height);
                     string discipline = GetDiscipline(element);
                     string name = (element.Name ?? element.GetType().Name) + " [" + source.ModelName + "]";
+                    result.ElementsTestedForSection++;
+                    IList<SectionProjectionItem> projected = ProjectElementToSection(
+                        element, source.ToHost, right, up, view.ViewDirection.Normalize(),
+                        origin, uniqueId, name, discipline, width, height);
+                    if (projected.Count == 0) result.ElementsOutsideSection++;
+                    else
+                    {
+                        foreach (SectionProjectionItem sectionItem in projected)
+                            result.SectionItems.Add(sectionItem);
+                        result.SectionIntersections += projected.Count;
+                    }
+
                     result.Items.Add(new KnowledgeBasedCsdEngine.ServiceItem
                     {
                         Id = uniqueId,
@@ -149,6 +179,106 @@ namespace AlignTool.Services
             result.SourceDescription = (useSelection ? "Selection" : "Active view") +
                 " + linked models (" + links.Count + ")";
             return result;
+        }
+
+
+        private const double SectionPlaneToleranceFeet = 0.0164041995; // 5 mm
+
+        private static IList<SectionProjectionItem> ProjectElementToSection(
+            Element element, Transform toHost, XYZ right, XYZ up, XYZ normal, XYZ origin,
+            string id, string name, string discipline, double profileWidthMm, double profileHeightMm)
+        {
+            var output = new List<SectionProjectionItem>();
+            MEPCurve mepCurve = element as MEPCurve;
+            LocationCurve location = element.Location as LocationCurve;
+            if (mepCurve != null && location != null && location.Curve != null)
+            {
+                IList<XYZ> points;
+                try { points = location.Curve.Tessellate(); }
+                catch { points = new List<XYZ>(); }
+                var hits = new List<XYZ>();
+                for (int i = 0; i < points.Count - 1; i++)
+                {
+                    XYZ a = toHost.OfPoint(points[i]);
+                    XYZ b = toHost.OfPoint(points[i + 1]);
+                    double da = (a - origin).DotProduct(normal);
+                    double db = (b - origin).DotProduct(normal);
+                    if (Math.Abs(da) <= SectionPlaneToleranceFeet && Math.Abs(db) <= SectionPlaneToleranceFeet)
+                    {
+                        AddUniqueHit(hits, a);
+                        AddUniqueHit(hits, b);
+                    }
+                    else if ((da <= SectionPlaneToleranceFeet && db >= -SectionPlaneToleranceFeet) ||
+                             (db <= SectionPlaneToleranceFeet && da >= -SectionPlaneToleranceFeet))
+                    {
+                        double denominator = da - db;
+                        if (Math.Abs(denominator) < 1e-9) continue;
+                        double t = da / denominator;
+                        if (t >= -0.000001 && t <= 1.000001)
+                            AddUniqueHit(hits, a + (b - a) * Math.Max(0, Math.Min(1, t)));
+                    }
+                }
+                foreach (XYZ hit in hits)
+                {
+                    output.Add(new SectionProjectionItem
+                    {
+                        Id = id, Name = name, Discipline = discipline,
+                        CenterXmm = (hit - origin).DotProduct(right) * 304.8,
+                        CenterYmm = (hit - origin).DotProduct(up) * 304.8,
+                        WidthMm = Math.Max(10, profileWidthMm),
+                        HeightMm = Math.Max(10, profileHeightMm),
+                        PlaneOffsetMm = (hit - origin).DotProduct(normal) * 304.8,
+                        ProjectionMethod = "Route centreline / connector profile"
+                    });
+                }
+                if (output.Count > 0) return output;
+                // Do not substitute a full-length route bounding box when the centreline misses the plane.
+                return output;
+            }
+
+            // Fittings/accessories/equipment use a conservative transformed 3D box envelope.
+            BoundingBoxXYZ box = null;
+            try { box = element.get_BoundingBox(null); } catch { }
+            if (box == null) return output;
+            Transform boxTransform = box.Transform ?? Transform.Identity;
+            double minDistance = double.MaxValue, maxDistance = double.MinValue;
+            double minX = double.MaxValue, maxX = double.MinValue;
+            double minY = double.MaxValue, maxY = double.MinValue;
+            for (int ix = 0; ix <= 1; ix++)
+            for (int iy = 0; iy <= 1; iy++)
+            for (int iz = 0; iz <= 1; iz++)
+            {
+                XYZ local = new XYZ(ix == 0 ? box.Min.X : box.Max.X,
+                    iy == 0 ? box.Min.Y : box.Max.Y, iz == 0 ? box.Min.Z : box.Max.Z);
+                XYZ host = toHost.OfPoint(boxTransform.OfPoint(local));
+                double distance = (host - origin).DotProduct(normal);
+                double x = (host - origin).DotProduct(right) * 304.8;
+                double y = (host - origin).DotProduct(up) * 304.8;
+                minDistance = Math.Min(minDistance, distance);
+                maxDistance = Math.Max(maxDistance, distance);
+                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
+            }
+            if (minDistance > SectionPlaneToleranceFeet || maxDistance < -SectionPlaneToleranceFeet)
+                return output;
+            output.Add(new SectionProjectionItem
+            {
+                Id = id, Name = name, Discipline = discipline,
+                CenterXmm = (minX + maxX) * 0.5,
+                CenterYmm = (minY + maxY) * 0.5,
+                WidthMm = Math.Max(10, maxX - minX),
+                HeightMm = Math.Max(10, maxY - minY),
+                PlaneOffsetMm = 0,
+                ProjectionMethod = "Conservative 3D bounding-box envelope"
+            });
+            return output;
+        }
+
+        private static void AddUniqueHit(IList<XYZ> hits, XYZ point)
+        {
+            foreach (XYZ existing in hits)
+                if (existing.DistanceTo(point) < 0.00656168) return; // 2 mm
+            hits.Add(point);
         }
 
         private sealed class SourceElement

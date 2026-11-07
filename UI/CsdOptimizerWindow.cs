@@ -21,6 +21,7 @@ namespace AlignTool.UI
         private readonly DataGrid _candidateGrid;
         private readonly DataGrid _placementGrid;
         private readonly Canvas _sectionCanvas;
+        private readonly Canvas _actualSectionCanvas;
         private readonly ComboBox _grade;
         private readonly TextBox _comment;
         private readonly TextBlock _status;
@@ -53,7 +54,9 @@ namespace AlignTool.UI
                 Text = extraction.SourceDescription + "  |  " + extraction.Items.Count +
                     " MEP elements  |  " + extraction.ConnectorCount + " connectors  |  " +
                     extraction.ElementsWithoutConnectors + " without connectors  |  " +
-                    extraction.SkippedElements + " skipped",
+                    extraction.SkippedElements + " skipped  |  " +
+                    extraction.SectionIntersections + " section hits / " +
+                    extraction.ElementsTestedForSection + " tested",
                 Margin = new Thickness(0, 4, 0, 0), Foreground = System.Windows.Media.Brushes.DimGray
             });
             DockPanel.SetDock(header, Dock.Top);
@@ -97,8 +100,13 @@ namespace AlignTool.UI
             Grid.SetColumn(left, 0); split.Children.Add(left);
 
             var right = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
-            right.Children.Add(new TextBlock { Text = "PROPOSED SECTION PREVIEW", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
-            _sectionCanvas = new Canvas { Width = 520, Height = 250, Background = Brushes.WhiteSmoke, ClipToBounds = true };
+            right.Children.Add(new TextBlock { Text = "ACTUAL MODEL SECTION - ACTIVE VIEW PLANE", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            _actualSectionCanvas = new Canvas { Width = 520, Height = 190, Background = Brushes.WhiteSmoke, ClipToBounds = true };
+            var actualBorder = new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Child = _actualSectionCanvas, Margin = new Thickness(0, 0, 0, 8) };
+            DockPanel.SetDock(actualBorder, Dock.Top);
+            right.Children.Add(actualBorder);
+            right.Children.Add(new TextBlock { Text = "PROPOSED ARRANGEMENT - SOLVER PREVIEW", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            _sectionCanvas = new Canvas { Width = 520, Height = 190, Background = Brushes.WhiteSmoke, ClipToBounds = true };
             var previewBorder = new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Child = _sectionCanvas, Margin = new Thickness(0, 0, 0, 8) };
             DockPanel.SetDock(previewBorder, Dock.Top);
             right.Children.Add(previewBorder);
@@ -133,6 +141,7 @@ namespace AlignTool.UI
             CandidateRow row = _candidateGrid.SelectedItem as CandidateRow;
             if (row == null) return;
             var byId = _extraction.Items.ToDictionary(x => x.Id, x => x);
+            DrawActualSectionProjection();
             DrawSectionPreview(row.Candidate);
             _placementGrid.ItemsSource = row.Candidate.Placements.Select(p =>
             {
@@ -156,6 +165,78 @@ namespace AlignTool.UI
                 " | Rule violations: " + row.Candidate.RuleViolations +
                 " | NDCG@5: " + KnowledgeBasedCsdEngine.CalculateNdcg(
                     _solve.Candidates, _assessments, 5).ToString("F3");
+        }
+
+
+        private void DrawActualSectionProjection()
+        {
+            _actualSectionCanvas.Children.Clear();
+            IList<RevitCsdExtractionService.SectionProjectionItem> items = _extraction.SectionItems;
+            if (items == null || items.Count == 0)
+            {
+                _actualSectionCanvas.Children.Add(new TextBlock
+                {
+                    Text = "No supported MEP geometry intersects the active view plane within 5 mm tolerance.",
+                    FontSize = 11, Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap,
+                    Width = _actualSectionCanvas.Width - 24
+                });
+                return;
+            }
+
+            double minX = items.Min(x => x.CenterXmm - x.WidthMm * 0.5);
+            double maxX = items.Max(x => x.CenterXmm + x.WidthMm * 0.5);
+            double minY = items.Min(x => x.CenterYmm - x.HeightMm * 0.5);
+            double maxY = items.Max(x => x.CenterYmm + x.HeightMm * 0.5);
+            double spanX = Math.Max(100, maxX - minX);
+            double spanY = Math.Max(100, maxY - minY);
+            const double margin = 12;
+            double scale = Math.Min((_actualSectionCanvas.Width - margin * 2) / spanX,
+                (_actualSectionCanvas.Height - margin * 2 - 15) / spanY);
+            double usedWidth = spanX * scale;
+            double usedHeight = spanY * scale;
+            double left = (_actualSectionCanvas.Width - usedWidth) * 0.5;
+            double top = (_actualSectionCanvas.Height - usedHeight - 15) * 0.5;
+
+            foreach (RevitCsdExtractionService.SectionProjectionItem item in items)
+            {
+                double w = Math.Max(3, item.WidthMm * scale);
+                double h = Math.Max(3, item.HeightMm * scale);
+                double x = left + (item.CenterXmm - minX) * scale - w * 0.5;
+                double y = top + (maxY - item.CenterYmm) * scale - h * 0.5;
+                var shape = new Rectangle
+                {
+                    Width = w, Height = h, Fill = GetDisciplineBrush(item.Discipline),
+                    Stroke = Brushes.Black, StrokeThickness = 0.7,
+                    ToolTip = item.Name + Environment.NewLine + item.Discipline +
+                        Environment.NewLine + item.WidthMm.ToString("F0") + " x " +
+                        item.HeightMm.ToString("F0") + " mm" + Environment.NewLine +
+                        item.ProjectionMethod
+                };
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                _actualSectionCanvas.Children.Add(shape);
+                if (w >= 34 && h >= 13)
+                {
+                    var label = new TextBlock
+                    {
+                        Text = ShortLabel(item.Name), FontSize = 8, Foreground = Brushes.Black,
+                        Width = Math.Max(20, w - 4), TextTrimming = TextTrimming.CharacterEllipsis,
+                        IsHitTestVisible = false
+                    };
+                    Canvas.SetLeft(label, x + 2);
+                    Canvas.SetTop(label, y + Math.Max(0, (h - 12) * 0.5));
+                    _actualSectionCanvas.Children.Add(label);
+                }
+            }
+
+            var note = new TextBlock
+            {
+                Text = items.Count + " projected envelopes | route cuts + conservative fitting/equipment boxes",
+                FontSize = 8, Foreground = Brushes.DimGray
+            };
+            Canvas.SetLeft(note, 8);
+            Canvas.SetTop(note, _actualSectionCanvas.Height - 13);
+            _actualSectionCanvas.Children.Add(note);
         }
 
         private void DrawSectionPreview(KnowledgeBasedCsdEngine.Candidate candidate)
