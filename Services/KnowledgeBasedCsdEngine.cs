@@ -124,19 +124,19 @@ namespace AlignTool.Services
             var result = new SolveResult { Candidates = new List<Candidate>(), Status = "Completed" };
             if (input.Count == 0) { result.Status = "No service items supplied."; return result; }
 
-            var strategies = new List<KeyValuePair<string, Func<ServiceItem, object>>>
+            var strategies = new List<KeyValuePair<string, Func<ServiceItem, double>>>
             {
-                Pair("Priority / elevation", x => new { A = -x.Priority, B = -x.PreferredElevationMm, C = x.Id }),
-                Pair("Largest first", x => new { A = -(x.WidthMm * x.HeightMm), B = -x.Priority, C = x.Id }),
-                Pair("Wet services lower", x => new { A = WetRank(x.Discipline), B = -x.Priority, C = x.Id }),
-                Pair("Electrical grouping", x => new { A = ElectricalRank(x.Discipline), B = -x.Priority, C = x.Id }),
-                Pair("Narrowest first", x => new { A = x.WidthMm, B = -x.HeightMm, C = x.Id }),
-                Pair("Preferred elevation", x => new { A = -x.PreferredElevationMm, B = x.WidthMm, C = x.Id })
+                Pair("Priority / elevation", x => -x.Priority * 1000000.0 - x.PreferredElevationMm),
+                Pair("Largest first", x => -(x.WidthMm * x.HeightMm) - x.Priority * 0.001),
+                Pair("Wet services lower", x => WetRank(x.Discipline) * 1000000.0 - x.Priority),
+                Pair("Electrical grouping", x => ElectricalRank(x.Discipline) * 1000000.0 - x.Priority),
+                Pair("Narrowest first", x => x.WidthMm - x.HeightMm * 0.001),
+                Pair("Preferred elevation", x => -x.PreferredElevationMm + x.WidthMm * 0.001)
             };
 
             foreach (var strategy in strategies)
             {
-                Candidate candidate = Pack(input.OrderBy(strategy.Value).ToList(), constraints, weights, strategy.Key);
+                Candidate candidate = Pack(input.OrderBy(strategy.Value).ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList(), constraints, weights, strategy.Key);
                 candidate.Id = "CSD-" + (result.Candidates.Count + 1).ToString("000");
                 result.Candidates.Add(candidate);
             }
@@ -154,8 +154,8 @@ namespace AlignTool.Services
             return result;
         }
 
-        private static KeyValuePair<string, Func<ServiceItem, object>> Pair(string name, Func<ServiceItem, object> selector)
-        { return new KeyValuePair<string, Func<ServiceItem, object>>(name, selector); }
+        private static KeyValuePair<string, Func<ServiceItem, double>> Pair(string name, Func<ServiceItem, double> selector)
+        { return new KeyValuePair<string, Func<ServiceItem, double>>(name, selector); }
 
         private static Candidate Pack(IList<ServiceItem> ordered, SectionConstraints c, Weights w, string strategy)
         {
@@ -218,7 +218,7 @@ namespace AlignTool.Services
                 ServiceItem ia = byId[a.ServiceId], ib = byId[b.ServiceId];
                 double dx = AxisGap(a.Xmm, a.WidthMm, b.Xmm, b.WidthMm);
                 double dy = AxisGap(a.Ymm, a.HeightMm, b.Ymm, b.HeightMm);
-                bool overlap = dx == 0 && dy == 0;
+                bool overlap = a.Xmm < b.Xmm + b.WidthMm && a.Xmm + a.WidthMm > b.Xmm\n                    && a.Ymm < b.Ymm + b.HeightMm && a.Ymm + a.HeightMm > b.Ymm;
                 if (overlap) { result.Clashes++; cost += w.Clash; }
                 else
                 {
