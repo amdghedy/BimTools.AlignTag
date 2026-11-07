@@ -43,7 +43,7 @@ namespace AlignTool.UI
                 ItemsSource = data.Clashes.Select(x => new {
                     ElementA = x.FirstName, ModelA = x.FirstModel, ElementB = x.SecondName,
                     ModelB = x.SecondModel, IntersectionVolume_mm3 = Math.Round(x.IntersectionVolumeMm3,1),
-                    SolidPairs = x.SolidPairsTested, x.GeometryBasis }).ToList(),
+                    SolidPairs = x.SolidPairsTested, GeometryA = x.FirstGeometryKind,\n                    GeometryB = x.SecondGeometryKind, InsulationRelated = x.IsInsulationOrLiningRelated, x.GeometryBasis }).ToList(),
                 MinHeight = 180, MaxHeight = 360 };
             body.Children.Add(clashes);
             body.Children.Add(new TextBlock { Text = "CONNECTOR INVENTORY",
