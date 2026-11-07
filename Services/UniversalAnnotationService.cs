@@ -118,6 +118,27 @@ namespace AlignTool.Services
                 new Move(x.Element, x.Position + axis * (target - x.Value))));
         }
 
+        public static int MatchToFirst(Document doc, View view, IList<Element> elements, bool horizontalLine)
+        {
+            if (doc == null || view == null || elements == null || elements.Count < 2) return 0;
+            Element master = elements.FirstOrDefault(e => e != null && Supports(e));
+            if (master == null) return 0;
+            XYZ masterPosition = GetHead(master);
+            if (masterPosition == null) return 0;
+            XYZ axis = (horizontalLine ? view.UpDirection : view.RightDirection).Normalize();
+            double target = masterPosition.DotProduct(axis);
+            var moves = new List<Move>();
+            foreach (Element element in elements)
+            {
+                if (element == null || element.Id == master.Id || element.Pinned || !Supports(element)) continue;
+                XYZ position = GetHead(element);
+                if (position == null) continue;
+                double current = position.DotProduct(axis);
+                if (Math.Abs(target - current) < 1e-9) continue;
+                moves.Add(new Move(element, position + axis * (target - current)));
+            }
+            return ApplyMoves(doc, moves);
+        }
         public static int Distribute(Document doc, View view, IList<Element> elements, bool horizontal)
         {
             if (doc == null || view == null || elements == null || elements.Count < 3) return 0;
@@ -222,6 +243,31 @@ namespace AlignTool.Commands
 
     internal static class UniversalAlignRunner
     {
+        public static Result RunMatch(ExternalCommandData data, ref string message, bool horizontalLine, string title)
+        {
+            UIDocument uidoc = data.Application.ActiveUIDocument;
+            Document doc = uidoc == null ? null : uidoc.Document;
+            View view = doc == null ? null : doc.ActiveView;
+            if (doc == null || view == null) { message = "No active document or view."; return Result.Failed; }
+            try
+            {
+                IList<Element> tags = UniversalAnnotationService.GetSelectedOrPick(uidoc, "Select tags; first selected tag is the alignment master");
+                if (tags.Count < 2)
+                {
+                    TaskDialog.Show(title, "Select at least two supported annotation tags.");
+                    return Result.Cancelled;
+                }
+                int moved = UniversalAnnotationService.MatchToFirst(doc, view, tags, horizontalLine);
+                TaskDialog.Show(title, moved + " annotation tag(s) matched to the first selected tag. Pinned tags were skipped.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                AlignTool.Helpers.Logger.Error(title + " failed", ex);
+                return Result.Failed;
+            }
+        }
         public static Result Run(ExternalCommandData data, ref string message,
             UniversalAnnotationService.AlignMode? mode, bool? distribute, string title)
         {
@@ -286,6 +332,19 @@ namespace AlignTool.Commands
     public class UniversalDistributeVerticalCommand : IExternalCommand
     { public Result Execute(ExternalCommandData c, ref string m, ElementSet e) => UniversalAlignRunner.Run(c, ref m, null, false, "Universal Distribute Vertical"); }
 
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalMatchHorizontalToFirstCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
+        { return UniversalAlignRunner.RunMatch(c, ref m, true, "Match Horizontal To First"); }
+    }
+
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalMatchVerticalToFirstCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
+        { return UniversalAlignRunner.RunMatch(c, ref m, false, "Match Vertical To First"); }
+    }
     [Transaction(TransactionMode.Manual)]
     public class UniversalSelectAllTagsInViewCommand : IExternalCommand
     {
