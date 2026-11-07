@@ -37,6 +37,11 @@ namespace AlignTool.Services
         {
             public string Key { get; set; }
             public string OwnerKey { get; set; }
+            public string OwnerUniqueId { get; set; }
+            public string ModelName { get; set; }
+            public int ConnectorId { get; set; }
+            public IList<string> ResolvedReferences { get; set; }
+            public IList<string> UnresolvedReferences { get; set; }
             public string ConnectorType { get; set; }
             public string Domain { get; set; }
             public string Shape { get; set; }
@@ -73,6 +78,10 @@ namespace AlignTool.Services
             public int SolidPairsTested { get; set; }
             public int BooleanFailures { get; set; }
             public int ConnectorReferences { get; set; }
+            public int ResolvedConnectorLinks { get; set; }
+            public int UnresolvedConnectorReferences { get; set; }
+            public int ConnectorDomainMismatches { get; set; }
+            public int ConnectorEndpointGaps { get; set; }
             public int OpenConnectors { get; set; }
             public int LinkedModelsScanned { get; set; }
             public string SourceDescription { get; set; }
@@ -181,6 +190,7 @@ namespace AlignTool.Services
 
             result.OpenConnectors = result.Connectors.Count(x => !x.IsConnected);
             result.ConnectorReferences = result.Connectors.Sum(x => x.References.Count);
+            ResolveConnectorReferences(result);
             DetectNativeSolidClashes(result);
             result.SourceDescription = (selectionMode ? "Selected host MEP / selected links" : "Active view MEP") +
                 "; loaded linked models scanned: " + result.LinkedModelsScanned;
@@ -273,7 +283,9 @@ namespace AlignTool.Services
                     string connectorKey = ownerKey + "/C" + connector.Id;
                     var item = new ConnectorRecord
                     {
-                        Key = connectorKey, OwnerKey = ownerKey,
+                        Key = connectorKey, OwnerKey = ownerKey, OwnerUniqueId = element.UniqueId,
+                        ModelName = result.Elements.Last().ModelName, ConnectorId = connector.Id,
+                        ResolvedReferences = new List<string>(), UnresolvedReferences = new List<string>(),
                         ConnectorType = connector.ConnectorType.ToString(),
                         Domain = connector.Domain.ToString(), Shape = connector.Shape.ToString(),
                         OriginHost = transform.OfPoint(connector.Origin),
@@ -298,10 +310,41 @@ namespace AlignTool.Services
                         string refKey = ownerKey + "/C" + reference.Id;
                         // Connector references are only resolved to records in the same source element
                         // document. A linked connector's counterpart is captured while that link is scanned.
-                        item.References.Add(reference.Owner.UniqueId + "/C" + reference.Id);
+                        item.References.Add(result.Elements.Last().ModelName + "|" + reference.Owner.UniqueId + "/C" + reference.Id);
                     }
                 }
                 catch { result.GeometryFailures++; }
+            }
+        }
+
+        private static void ResolveConnectorReferences(ExtractionResult result)
+        {
+            var index = result.Connectors.ToDictionary(
+                x => x.ModelName + "|" + x.OwnerUniqueId + "/C" + x.ConnectorId,
+                x => x, StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ConnectorRecord connector in result.Connectors)
+            {
+                foreach (string reference in connector.References)
+                {
+                    ConnectorRecord target;
+                    if (!index.TryGetValue(reference, out target))
+                    {
+                        connector.UnresolvedReferences.Add(reference);
+                        result.UnresolvedConnectorReferences++;
+                        continue;
+                    }
+                    connector.ResolvedReferences.Add(target.Key);
+                    string pairKey = string.Compare(connector.Key, target.Key, StringComparison.OrdinalIgnoreCase) < 0
+                        ? connector.Key + "|" + target.Key : target.Key + "|" + connector.Key;
+                    if (!seen.Add(pairKey)) continue;
+                    result.ResolvedConnectorLinks++;
+                    if (!string.Equals(connector.Domain, target.Domain, StringComparison.OrdinalIgnoreCase))
+                        result.ConnectorDomainMismatches++;
+                    if (connector.OriginHost != null && target.OriginHost != null &&
+                        connector.OriginHost.DistanceTo(target.OriginHost) * FeetToMm > 2.0)
+                        result.ConnectorEndpointGaps++;
+                }
             }
         }
 
