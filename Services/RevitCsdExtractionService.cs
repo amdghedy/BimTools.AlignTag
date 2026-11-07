@@ -14,9 +14,17 @@ namespace AlignTool.Services
         {
             public IList<KnowledgeBasedCsdEngine.ServiceItem> Items { get; set; }
             public IList<SectionProjectionItem> SectionItems { get; set; }
+            public double MinXmm { get; set; }
+            public double MaxXmm { get; set; }
+            public double MinYmm { get; set; }
+            public double MaxYmm { get; set; }
+            public int ConnectorCount { get; set; }
+            public int ElementsWithoutConnectors { get; set; }
+            public int SkippedElements { get; set; }
             public int ElementsTestedForSection { get; set; }
             public int SectionIntersections { get; set; }
             public int ElementsOutsideSection { get; set; }
+            public string SourceDescription { get; set; }
         }
 
         /// <summary>Measured view-plane projection; route centreline/profile or conservative fitting/equipment bounding envelope.</summary>
@@ -31,15 +39,6 @@ namespace AlignTool.Services
             public double HeightMm { get; set; }
             public double PlaneOffsetMm { get; set; }
             public string ProjectionMethod { get; set; }
-        }
-            public double MinXmm { get; set; }
-            public double MaxXmm { get; set; }
-            public double MinYmm { get; set; }
-            public double MaxYmm { get; set; }
-            public int ConnectorCount { get; set; }
-            public int ElementsWithoutConnectors { get; set; }
-            public int SkippedElements { get; set; }
-            public string SourceDescription { get; set; }
         }
 
         public static ExtractionResult Extract(Document doc, View view, IEnumerable<ElementId> selectedIds)
