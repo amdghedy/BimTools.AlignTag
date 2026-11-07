@@ -55,8 +55,9 @@ namespace AlignTool.UI
                     " MEP elements  |  " + extraction.ConnectorCount + " connectors  |  " +
                     extraction.ElementsWithoutConnectors + " without connectors  |  " +
                     extraction.SkippedElements + " skipped  |  " +
-                    extraction.SectionIntersections + " section hits / " +
-                    extraction.ElementsTestedForSection + " tested",
+                    extraction.SolidIntersections + " solid sections / " +
+                    extraction.SolidIntersectionFailures + " geometry failures / " +
+                    extraction.InsulationLiningElements + " insulation/lining objects",
                 Margin = new Thickness(0, 4, 0, 0), Foreground = System.Windows.Media.Brushes.DimGray
             });
             DockPanel.SetDock(header, Dock.Top);
@@ -94,8 +95,16 @@ namespace AlignTool.UI
             AddColumn(_candidateGrid, "Clashes", "Clashes", 65);
             AddColumn(_candidateGrid, "Clearance", "ClearanceViolations", 75);
             AddColumn(_candidateGrid, "Rules", "RuleViolations", 55);
+            AddColumn(_candidateGrid, "Solid clashes", "SolidProfileClashes", 75);
+            AddColumn(_candidateGrid, "Solid boundary", "GeometryBoundaryViolations", 75);
+            AddColumn(_candidateGrid, "Profiles", "GeometryCoverage", 70);
+            AddColumn(_candidateGrid, "Geometry check", "GeometryStatus", 160);
             _candidateGrid.SelectionChanged += CandidateChanged;
-            _candidateGrid.ItemsSource = solve.Candidates.Select(c => new CandidateRow(c)).ToList();
+            IList<CsdSectionGeometryValidator.CandidateCheck> geometryChecks =
+                CsdSectionGeometryValidator.Validate(solve.Candidates, extraction, constraints);
+            _candidateGrid.ItemsSource = solve.Candidates.Select(candidate =>
+                new CandidateRow(candidate, geometryChecks.FirstOrDefault(x =>
+                    string.Equals(x.CandidateId, candidate.Id, StringComparison.OrdinalIgnoreCase)))).ToList();
             left.Children.Add(_candidateGrid);
             Grid.SetColumn(left, 0); split.Children.Add(left);
 
@@ -163,6 +172,9 @@ namespace AlignTool.UI
                 " | Boundary: " + row.Candidate.BoundaryViolations +
                 " | Clashes: " + row.Candidate.Clashes +
                 " | Rule violations: " + row.Candidate.RuleViolations +
+                " | Measured profile overlaps: " + row.SolidProfileClashes +
+                " | Measured boundary violations: " + row.GeometryBoundaryViolations +
+                " | Geometry: " + row.GeometryStatus +
                 " | NDCG@5: " + KnowledgeBasedCsdEngine.CalculateNdcg(
                     _solve.Candidates, _assessments, 5).ToString("F3");
         }
@@ -176,7 +188,7 @@ namespace AlignTool.UI
             {
                 _actualSectionCanvas.Children.Add(new TextBlock
                 {
-                    Text = "No supported MEP geometry intersects the active view plane within 5 mm tolerance.",
+                    Text = "No solid section contours were returned. Check the geometry failure count and confirm that the active view plane crosses the selected MEP solids.",
                     FontSize = 11, Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap,
                     Width = _actualSectionCanvas.Width - 24
                 });
@@ -199,39 +211,51 @@ namespace AlignTool.UI
 
             foreach (RevitCsdExtractionService.SectionProjectionItem item in items)
             {
-                double w = Math.Max(3, item.WidthMm * scale);
-                double h = Math.Max(3, item.HeightMm * scale);
-                double x = left + (item.CenterXmm - minX) * scale - w * 0.5;
-                double y = top + (maxY - item.CenterYmm) * scale - h * 0.5;
-                var shape = new Rectangle
+                if (item.Contours == null) continue;
+                Brush disciplineBrush = GetDisciplineBrush(item.Discipline);
+                foreach (RevitCsdExtractionService.SectionContour contour in item.Contours)
                 {
-                    Width = w, Height = h, Fill = GetDisciplineBrush(item.Discipline),
-                    Stroke = Brushes.Black, StrokeThickness = 0.7,
-                    ToolTip = item.Name + Environment.NewLine + item.Discipline +
-                        Environment.NewLine + item.WidthMm.ToString("F0") + " x " +
-                        item.HeightMm.ToString("F0") + " mm" + Environment.NewLine +
-                        item.ProjectionMethod
-                };
-                Canvas.SetLeft(shape, x);
-                Canvas.SetTop(shape, y);
-                _actualSectionCanvas.Children.Add(shape);
-                if (w >= 34 && h >= 13)
+                    if (contour.Points == null || contour.Points.Count < 3) continue;
+                    var points = new PointCollection();
+                    foreach (RevitCsdExtractionService.SectionPoint point in contour.Points)
+                    {
+                        double px = left + (point.Xmm - minX) * scale;
+                        double py = top + (maxY - point.Ymm) * scale;
+                        points.Add(new Point(px, py));
+                    }
+                    var polygon = new Polygon
+                    {
+                        Points = points,
+                        Fill = contour.IsHole ? Brushes.WhiteSmoke : Brushes.Transparent,
+                        Stroke = contour.IsHole ? Brushes.DimGray : disciplineBrush,
+                        StrokeThickness = contour.IsHole ? 0.9 : 1.5,
+                        ToolTip = item.Name + Environment.NewLine + item.Discipline +
+                            Environment.NewLine + item.WidthMm.ToString("F1") + " x " +
+                            item.HeightMm.ToString("F1") + " mm" + Environment.NewLine +
+                            item.ProjectionMethod
+                    };
+                    _actualSectionCanvas.Children.Add(polygon);
+                }
+
+                if (item.WidthMm * scale >= 42 && item.HeightMm * scale >= 15)
                 {
                     var label = new TextBlock
                     {
                         Text = ShortLabel(item.Name), FontSize = 8, Foreground = Brushes.Black,
-                        Width = Math.Max(20, w - 4), TextTrimming = TextTrimming.CharacterEllipsis,
+                        Width = Math.Max(24, item.WidthMm * scale - 4),
+                        TextTrimming = TextTrimming.CharacterEllipsis,
                         IsHitTestVisible = false
                     };
-                    Canvas.SetLeft(label, x + 2);
-                    Canvas.SetTop(label, y + Math.Max(0, (h - 12) * 0.5));
+                    Canvas.SetLeft(label, left + (item.CenterXmm - minX) * scale - item.WidthMm * scale * 0.5 + 2);
+                    Canvas.SetTop(label, top + (maxY - item.CenterYmm) * scale - 6);
                     _actualSectionCanvas.Children.Add(label);
                 }
             }
 
             var note = new TextBlock
             {
-                Text = items.Count + " projected envelopes | route cuts + conservative fitting/equipment boxes",
+                Text = items.Count + " solid section profiles | Boolean slab 2 mm | geometry failures: " +
+                    _extraction.SolidIntersectionFailures,
                 FontSize = 8, Foreground = Brushes.DimGray
             };
             Canvas.SetLeft(note, 8);
@@ -404,7 +428,17 @@ namespace AlignTool.UI
             public int Clashes { get { return Candidate.Clashes; } }
             public int ClearanceViolations { get { return Candidate.ClearanceViolations; } }
             public int RuleViolations { get { return Candidate.RuleViolations; } }
-            public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate) { Candidate = candidate; }
+            private readonly CsdSectionGeometryValidator.CandidateCheck _geometry;
+            public int SolidProfileClashes { get { return _geometry == null ? 0 : _geometry.SolidProfileClashes; } }
+            public int GeometryBoundaryViolations { get { return _geometry == null ? 0 : _geometry.GeometryBoundaryViolations; } }
+            public string GeometryCoverage { get { return _geometry == null ? "N/A" : _geometry.GeometryItemsMatched + "/" + (_geometry.GeometryItemsMatched + _geometry.GeometryItemsMissing); } }
+            public string GeometryStatus { get { return _geometry == null ? "Not checked" : _geometry.Status; } }
+            public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate,
+                CsdSectionGeometryValidator.CandidateCheck geometry)
+            {
+                Candidate = candidate;
+                _geometry = geometry;
+            }
         }
 
         private sealed class PlacementRow
