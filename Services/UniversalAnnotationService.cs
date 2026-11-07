@@ -345,6 +345,48 @@ namespace AlignTool.Commands
         public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
         { return UniversalAlignRunner.RunMatch(c, ref m, false, "Match Vertical To First"); }
     }
+
+    internal static class UniversalTagSelectionRunner
+    {
+        public static Result Run(ExternalCommandData data, ref string message, int mode, string title)
+        {
+            UIDocument uidoc = data.Application.ActiveUIDocument;
+            Document doc = uidoc == null ? null : uidoc.Document;
+            if (doc == null) { message = "No active document."; return Result.Failed; }
+            try
+            {
+                IList<Element> all = UniversalAnnotationService.GetAllInView(doc, doc.ActiveView);
+                var current = new HashSet<ElementId>(uidoc.Selection.GetElementIds());
+                IEnumerable<Element> result;
+                if (mode == 1) result = all.Where(x => x.Pinned);
+                else if (mode == 2) result = all.Where(x => !x.Pinned);
+                else result = all.Where(x => !current.Contains(x.Id));
+                IList<ElementId> ids = result.Select(x => x.Id).ToList();
+                uidoc.Selection.SetElementIds(ids);
+                TaskDialog.Show(title, ids.Count + " supported tag(s) selected.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                AlignTool.Helpers.Logger.Error(title + " failed", ex);
+                return Result.Failed;
+            }
+        }
+    }
+
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalSelectPinnedTagsCommand : IExternalCommand
+    { public Result Execute(ExternalCommandData c, ref string m, ElementSet e) { return UniversalTagSelectionRunner.Run(c, ref m, 1, "Select Pinned Tags"); } }
+
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalSelectUnpinnedTagsCommand : IExternalCommand
+    { public Result Execute(ExternalCommandData c, ref string m, ElementSet e) { return UniversalTagSelectionRunner.Run(c, ref m, 2, "Select Unpinned Tags"); } }
+
+    [Transaction(TransactionMode.Manual)]
+    public class UniversalInvertTagSelectionCommand : IExternalCommand
+    { public Result Execute(ExternalCommandData c, ref string m, ElementSet e) { return UniversalTagSelectionRunner.Run(c, ref m, 3, "Invert Tag Selection"); } }
+
     [Transaction(TransactionMode.Manual)]
     public class UniversalSelectAllTagsInViewCommand : IExternalCommand
     {
