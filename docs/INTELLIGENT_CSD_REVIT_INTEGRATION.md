@@ -86,3 +86,19 @@ The WPF review is read-only: no Revit transaction is started and no model elemen
 - Connector links are resolved from `Connector.AllRefs`; unresolved references are surfaced, but expected open-end rules and connector-direction compatibility are not yet implemented.
 - Extraction is based on the active view/selection and loaded links. Large federated models may require spatial indexing and incremental processing.
 - Revit 2020 runtime validation with representative project models remains required before production use.
+
+## Multi-section corridor workspace (implementation increment)
+
+The ALIGN ribbon now exposes **Corridor Sections**. This is a separate read-only review command built on the 3D extraction result:
+
+- Reuses native host and transformed linked-model Revit solids already extracted for 3D coordination, including attached insulation and lining solids.
+- Generates a configurable sequence of section stations from a start offset, station spacing, station count (1–100), and finite Boolean slab thickness (0.5–100 mm).
+- Uses parallel station planes normal to the active view direction, with the active view right/up vectors as the section coordinate frame. Orient the active view along the corridor before generating stations.
+- Intersects each measured solid with a Revit extrusion slab using BooleanOperationsUtils.ExecuteBooleanOperation; no connector-size or bounding-box rectangle is substituted for a failed solid section.
+- Reads the cap-face edge loops, tessellates curved edges, preserves inner loops as holes, and records element/model/system/category/discipline, geometry kind (element/insulation/lining), profile width/height, area, and contour point geometry.
+- Displays a station list, measured-solid section inventory, and a scalable 2D contour preview for the selected station. Boolean failures and empty stations remain visible in diagnostics.
+- Does not start a Revit transaction and does not move, rotate, resize, reconnect, or otherwise modify any model element.
+
+### Station geometry and engineering limits
+
+Offsets are measured in millimetres from the active view origin along View.ViewDirection. The section plane is parallel to the active view plane. This means the active view must be deliberately oriented so its view direction follows the corridor's longitudinal axis; this is not an automatic corridor-path detector. The section slab is finite-thickness, so the displayed profile is the solid intersection at the selected slab cap, not a mathematical zero-thickness cut. Curved edges are tessellated according to Revit's edge tessellation output. The workspace currently compares and displays independent measured stations; it does not yet infer route continuity between stations, optimize displacement transforms, or persist approvals. Maintenance/access zones and project clearance profiles remain the next implementation increment. Revit 2020 runtime validation against representative project models is still required.
