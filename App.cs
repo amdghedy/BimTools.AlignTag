@@ -72,6 +72,11 @@ namespace AlignTool
                 RibbonHelper.AddPushButton(pUniversal, "UniversalMatchH", "Match H", "AlignTool.Commands.UniversalMatchHorizontalToFirstCommand", "Match selected tags to the first selected tag on the same view-horizontal line.", null, "align_h");
                 RibbonHelper.AddPushButton(pUniversal, "UniversalMatchV", "Match V", "AlignTool.Commands.UniversalMatchVerticalToFirstCommand", "Match selected tags to the first selected tag on the same view-vertical line.", null, "align_v");
 
+                RibbonPanel pSelect = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "TAG SELECTION");
+                RibbonHelper.AddPushButton(pSelect, "UniversalSelectPinned", "Pinned", "AlignTool.Commands.UniversalSelectPinnedTagsCommand", "Select supported pinned annotation tags in the active view.", null, "pin");
+                RibbonHelper.AddPushButton(pSelect, "UniversalSelectUnpinned", "Unpinned", "AlignTool.Commands.UniversalSelectUnpinnedTagsCommand", "Select supported unpinned annotation tags in the active view.", null, "unpin");
+                RibbonHelper.AddPushButton(pSelect, "UniversalInvertSelection", "Invert", "AlignTool.Commands.UniversalInvertTagSelectionCommand", "Invert the current selection among supported annotation tags in the active view.", null, "invert");
+
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
             }
