@@ -103,7 +103,7 @@ The first Annotation Manager layer adds geometry-based operations for selected *
 - Audit: inspect visible annotation bounds and report potential 2D overlaps and elements without usable view bounds.
 - Resolve: calculate a collision-reduction move plan, show a confirmation preview, then apply only after the user confirms. Pinned elements are excluded.
 
-Spacing for the collision planner currently defaults to 2 mm. The audit is a geometric screening tool, not a semantic checker: bounding-box intersections can include intentional overlaps and cannot prove that leaders, dimension witness lines, text readability, or plotted output are correct. Re-run Audit after applying a plan and visually review the view. Every move is performed in a Revit transaction with per-element failure isolation.
+Collision clearance is configurable in BIM TOOLS → TAG TOOLS → Settings and defaults to 2 mm. The preview lists affected element IDs and proposed move distances; the audit report lists detected overlap pairs. The audit is a geometric screening tool, not a semantic checker: bounding-box intersections can include intentional overlaps and cannot prove that leaders, dimension witness lines, text readability, or plotted output are correct. Re-run Audit after applying a plan and visually review the view. Every move is performed in a Revit transaction with per-element failure isolation.
 
 The manager uses Revit view-specific bounding boxes and ElementTransformUtils.MoveElement; it does not rewrite dimension references or text content. Leader elbow/endpoint optimization, MEP-host-aware placement, configurable rule profiles, persistent audit reports and a richer graphical preview remain planned work and are not claimed as complete in this phase.
 ### ARRANGE
