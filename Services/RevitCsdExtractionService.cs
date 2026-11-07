@@ -46,6 +46,7 @@ namespace AlignTool.Services
         public sealed class SectionProjectionItem
         {
             public string Id { get; set; }
+            public string ServiceId { get; set; }
             public string Name { get; set; }
             public string Discipline { get; set; }
             public double CenterXmm { get; set; }
@@ -302,6 +303,7 @@ namespace AlignTool.Services
                     output.Add(new SectionProjectionItem
                     {
                         Id = id + ":" + source.Kind,
+                        ServiceId = id,
                         Name = name + " (" + source.Kind + ")",
                         Discipline = discipline,
                         CenterXmm = (minContourX + maxContourX) * 0.5,
