@@ -95,8 +95,15 @@ namespace AlignTool.UI
             AddColumn(_candidateGrid, "Clashes", "Clashes", 65);
             AddColumn(_candidateGrid, "Clearance", "ClearanceViolations", 75);
             AddColumn(_candidateGrid, "Rules", "RuleViolations", 55);
+            AddColumn(_candidateGrid, "Solid clashes", "SolidProfileClashes", 75);
+            AddColumn(_candidateGrid, "Profiles", "GeometryCoverage", 70);
+            AddColumn(_candidateGrid, "Geometry check", "GeometryStatus", 160);
             _candidateGrid.SelectionChanged += CandidateChanged;
-            _candidateGrid.ItemsSource = solve.Candidates.Select(c => new CandidateRow(c)).ToList();
+            IList<CsdSectionGeometryValidator.CandidateCheck> geometryChecks =
+                CsdSectionGeometryValidator.Validate(solve.Candidates, extraction);
+            _candidateGrid.ItemsSource = solve.Candidates.Select(candidate =>
+                new CandidateRow(candidate, geometryChecks.FirstOrDefault(x =>
+                    string.Equals(x.CandidateId, candidate.Id, StringComparison.OrdinalIgnoreCase)))).ToList();
             left.Children.Add(_candidateGrid);
             Grid.SetColumn(left, 0); split.Children.Add(left);
 
@@ -417,7 +424,16 @@ namespace AlignTool.UI
             public int Clashes { get { return Candidate.Clashes; } }
             public int ClearanceViolations { get { return Candidate.ClearanceViolations; } }
             public int RuleViolations { get { return Candidate.RuleViolations; } }
-            public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate) { Candidate = candidate; }
+            private readonly CsdSectionGeometryValidator.CandidateCheck _geometry;
+            public int SolidProfileClashes { get { return _geometry == null ? 0 : _geometry.SolidProfileClashes; } }
+            public string GeometryCoverage { get { return _geometry == null ? "N/A" : _geometry.GeometryItemsMatched + "/" + (_geometry.GeometryItemsMatched + _geometry.GeometryItemsMissing); } }
+            public string GeometryStatus { get { return _geometry == null ? "Not checked" : _geometry.Status; } }
+            public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate,
+                CsdSectionGeometryValidator.CandidateCheck geometry)
+            {
+                Candidate = candidate;
+                _geometry = geometry;
+            }
         }
 
         private sealed class PlacementRow
