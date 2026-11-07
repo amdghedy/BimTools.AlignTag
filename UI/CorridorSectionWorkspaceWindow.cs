@@ -44,7 +44,7 @@ namespace AlignTool.UI
             MinWidth = 1050;
             MinHeight = 650;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = new SolidColorBrush(Color.FromRgb(245, 247, 251));
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(245, 247, 251));
 
             var root = new DockPanel { Margin = new Thickness(16) };
             var header = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
@@ -113,7 +113,7 @@ namespace AlignTool.UI
             _stations.Columns.Add(Column("Elements", "ElementCount", 72));
             _stations.SelectionChanged += (s, e) => SelectStation(_stations.SelectedItem as CorridorSectionWorkspaceService.StationResult);
             stationPanel.Children.Add(_stations);
-            System.Windows.Controls.Grid.SetColumn(stationPanel, 0);
+            System.Windows.Controls.System.Windows.Controls.Grid.SetColumn(stationPanel, 0);
             body.Children.Add(stationPanel);
 
             var itemPanel = new DockPanel { Margin = new Thickness(0, 0, 10, 0) };
@@ -173,7 +173,7 @@ namespace AlignTool.UI
             return new DataGridTextColumn
             {
                 Header = title,
-                Binding = new Binding(path) { StringFormat = "F1" },
+                Binding = new System.Windows.Data.Binding(path) { StringFormat = "F1" },
                 Width = new DataGridLength(width)
             };
         }
