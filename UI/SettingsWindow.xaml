@@ -11,6 +11,8 @@
     <StackPanel>
       <TextBlock Text="Stack spacing (mm)"/>
       <TextBox x:Name="TxtSpacing" Margin="0,4,0,12"/>
+      <TextBlock Text="Annotation collision clearance (mm)"/>
+      <TextBox x:Name="TxtCollisionGap" Margin="0,4,0,12"/>
       <TextBlock Text="Max move (mm)"/>
       <TextBox x:Name="TxtMaxMove" Margin="0,4,0,12"/>
       <TextBlock Text="Minimize leader (mm)"/>

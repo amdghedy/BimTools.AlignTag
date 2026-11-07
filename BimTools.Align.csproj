@@ -89,6 +89,7 @@
     <Compile Include="Services\SettingsService.cs" />
     <Compile Include="Services\AlignBoxService.cs" />
     <Compile Include="Services\UniversalAnnotationService.cs" />
+    <Compile Include="Services\AnnotationManagementService.cs" />
     <Compile Include="Models\AlignmentResult.cs" />
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\TagInfo.cs" />
