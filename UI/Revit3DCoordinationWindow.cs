@@ -52,7 +52,7 @@ namespace AlignTool.UI
                 CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column,
                 ItemsSource = data.Connectors.Select(x => new {
                     x.OwnerKey, x.Key, x.Domain, x.ConnectorType, x.Shape,
-                    Connected = x.IsConnected, References = x.References.Count }).ToList(),
+                    Connected = x.IsConnected, References = x.References.Count,\n                    Resolved = x.ResolvedReferences.Count, Unresolved = x.UnresolvedReferences.Count }).ToList(),
                 MinHeight = 120, MaxHeight = 220 };
             body.Children.Add(connectors);
             var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -70,7 +70,7 @@ namespace AlignTool.UI
             b.AppendLine("Broad-phase element pairs: " + x.BroadPhasePairs + "   |   Native solid pairs tested: " +
                 x.SolidPairsTested + "   |   Boolean failures: " + x.BooleanFailures);
             b.AppendLine("Native solid clashes: " + x.Clashes.Count + "   |   Connectors: " + x.Connectors.Count +
-                "   |   Open connectors: " + x.OpenConnectors + "   |   Connector references: " + x.ConnectorReferences);
+                "   |   Open connectors: " + x.OpenConnectors + "   |   Connector references: " + x.ConnectorReferences +\n                "   |   Resolved links: " + x.ResolvedConnectorLinks +\n                "   |   Unresolved references: " + x.UnresolvedConnectorReferences +\n                "   |   Domain mismatches: " + x.ConnectorDomainMismatches +\n                "   |   Endpoint gaps > 2 mm: " + x.ConnectorEndpointGaps);
             b.AppendLine("Geometry extraction failures: " + x.GeometryFailures);
             b.AppendLine("Safety: read-only analysis. No Revit transactions or model modifications are performed.");
             return b.ToString();
