@@ -76,7 +76,7 @@ namespace AlignTool.Services
                         WidthMm = width,
                         HeightMm = height,
                         RequiredClearanceMm = 50,
-                        PreferredElevationMm = Math.Max(0, y),
+                        PreferredElevationMm = y,
                         MinimumElevationMm = 0,
                         IsFixed = false,
                         Priority = GetPriority(discipline)
