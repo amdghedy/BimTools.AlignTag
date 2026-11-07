@@ -73,6 +73,7 @@
     <Compile Include="Commands\PreventLeaderCrossingCommand.cs" />
     <Compile Include="Commands\MepTagOrganizerCommand.cs" />
     <Compile Include="Services\MepTagOrganizerService.cs" />
+    <Compile Include="Services\KnowledgeBasedCsdEngine.cs" />
     <Compile Include="Commands\StraightenLeadersCommand.cs" />
     <Compile Include="Commands\MatchLeaderLengthsCommand.cs" />
     <Compile Include="Commands\AlignTagOrientationCommand.cs" />
