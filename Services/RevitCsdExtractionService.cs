@@ -232,6 +232,8 @@ namespace AlignTool.Services
                     });
                 }
                 if (output.Count > 0) return output;
+                // Do not substitute a full-length route bounding box when the centreline misses the plane.
+                return output;
             }
 
             // Fittings/accessories/equipment use a conservative transformed 3D box envelope.
