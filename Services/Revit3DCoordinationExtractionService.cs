@@ -218,7 +218,7 @@ namespace AlignTool.Services
                     ExtractSolids(attached, transform, insulation ? "Insulation" : "Lining", record, result);
                 }
             }
-            catch { result.GeometryFailures++; }
+            catch { /* Elements without attached insulation/lining are normal. */ }
         }
 
         private static void ExtractSolids(Element element, Transform transform, string kind,
@@ -226,7 +226,7 @@ namespace AlignTool.Services
         {
             try
             {
-                var options = new Options { ComputeReferences = true,
+                var options = new Options { ComputeReferences = false,
                     IncludeNonVisibleObjects = true, DetailLevel = ViewDetailLevel.Fine };
                 GeometryElement geometry = element.get_Geometry(options);
                 if (geometry != null) CollectGeometry(geometry, transform ?? Transform.Identity, kind, record, result);
