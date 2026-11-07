@@ -18,6 +18,7 @@ namespace AlignTool.Services
             public int GeometryItemsMissing { get; set; }
             public int PairsChecked { get; set; }
             public int SolidProfileClashes { get; set; }
+            public int GeometryBoundaryViolations { get; set; }
             public string Status { get; set; }
         }
 
@@ -46,7 +47,8 @@ namespace AlignTool.Services
 
         public static IList<CandidateCheck> Validate(
             IList<KnowledgeBasedCsdEngine.Candidate> candidates,
-            RevitCsdExtractionService.ExtractionResult extraction)
+            RevitCsdExtractionService.ExtractionResult extraction,
+            KnowledgeBasedCsdEngine.SectionConstraints constraints)
         {
             var results = new List<CandidateCheck>();
             if (candidates == null || extraction == null) return results;
@@ -65,7 +67,8 @@ namespace AlignTool.Services
                     GeometryItemsMatched = 0,
                     GeometryItemsMissing = 0,
                     PairsChecked = 0,
-                    SolidProfileClashes = 0
+                    SolidProfileClashes = 0,
+                    GeometryBoundaryViolations = 0
                 };
                 var proposed = new List<ServiceShape>();
                 foreach (KnowledgeBasedCsdEngine.Placement placement in candidate.Placements)
@@ -98,6 +101,12 @@ namespace AlignTool.Services
                         }
                         moved.Polygons.Add(movedPolygon);
                     }
+                    if (constraints != null &&
+                        (moved.MinX < constraints.SideClearanceMm ||
+                         moved.MaxX > constraints.WidthMm - constraints.SideClearanceMm ||
+                         moved.MinY < constraints.BottomClearanceMm ||
+                         moved.MaxY > constraints.HeightMm - constraints.TopClearanceMm))
+                        check.GeometryBoundaryViolations++;
                     proposed.Add(moved);
                 }
 
@@ -112,9 +121,11 @@ namespace AlignTool.Services
                     ? "No measured section profiles"
                     : check.GeometryItemsMissing > 0
                         ? "Partial section coverage"
-                        : check.SolidProfileClashes > 0
-                            ? "Measured profile overlap"
-                            : "No 2D profile overlap detected";
+                        : check.GeometryBoundaryViolations > 0
+                            ? "Measured profile exceeds section boundary"
+                            : check.SolidProfileClashes > 0
+                                ? "Measured profile overlap"
+                                : "No 2D profile overlap detected";
                 results.Add(check);
             }
             return results;
