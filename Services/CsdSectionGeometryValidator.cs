@@ -25,6 +25,7 @@ namespace AlignTool.Services
         {
             public string ServiceId;
             public IList<Point2> Points;
+            public bool IsHole;
         }
 
         private sealed class Point2
@@ -136,8 +137,8 @@ namespace AlignTool.Services
 
                 foreach (RevitCsdExtractionService.SectionContour contour in item.Contours)
                 {
-                    if (contour.IsHole || contour.Points == null || contour.Points.Count < 3) continue;
-                    var polygon = new PolygonData { ServiceId = serviceId, Points = new List<Point2>() };
+                    if (contour.Points == null || contour.Points.Count < 3) continue;
+                    var polygon = new PolygonData { ServiceId = serviceId, IsHole = contour.IsHole, Points = new List<Point2>() };
                     foreach (RevitCsdExtractionService.SectionPoint point in contour.Points)
                     {
                         polygon.Points.Add(new Point2 { X = point.Xmm, Y = point.Ymm });
@@ -158,17 +159,29 @@ namespace AlignTool.Services
                 return false;
             foreach (PolygonData pa in a.Polygons)
             foreach (PolygonData pb in b.Polygons)
-                if (PolygonsOverlap(pa.Points, pb.Points)) return true;
+                if (BoundariesIntersect(pa.Points, pb.Points)) return true;
+
+            foreach (PolygonData polygon in a.Polygons.Where(x => !x.IsHole))
+                if (polygon.Points.Any(point => PointInMaterial(point, b))) return true;
+            foreach (PolygonData polygon in b.Polygons.Where(x => !x.IsHole))
+                if (polygon.Points.Any(point => PointInMaterial(point, a))) return true;
             return false;
         }
 
-        private static bool PolygonsOverlap(IList<Point2> a, IList<Point2> b)
+        private static bool BoundariesIntersect(IList<Point2> a, IList<Point2> b)
         {
             for (int i = 0; i < a.Count; i++)
             for (int j = 0; j < b.Count; j++)
                 if (SegmentsIntersect(a[i], a[(i + 1) % a.Count], b[j], b[(j + 1) % b.Count]))
                     return true;
-            return PointInside(a[0], b) || PointInside(b[0], a);
+            return false;
+        }
+
+        private static bool PointInMaterial(Point2 point, ServiceShape shape)
+        {
+            bool insideOuter = shape.Polygons.Any(p => !p.IsHole && PointInside(point, p.Points));
+            if (!insideOuter) return false;
+            return !shape.Polygons.Any(p => p.IsHole && PointInside(point, p.Points));
         }
 
         private static bool PointInside(Point2 point, IList<Point2> polygon)
