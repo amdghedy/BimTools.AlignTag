@@ -66,6 +66,10 @@ namespace AlignTool.Services
             public string SourceDescription { get; set; }
             public string PlaneDescription { get; set; }
             public double SlabThicknessMm { get; set; }
+            public XYZ BaseOrigin { get; set; }
+            public XYZ Right { get; set; }
+            public XYZ Up { get; set; }
+            public XYZ Normal { get; set; }
             public int StationsRequested { get; set; }
             public int StationsWithGeometry { get; set; }
             public int SolidsTested { get; set; }
