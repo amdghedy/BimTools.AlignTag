@@ -33,13 +33,13 @@ namespace AlignTool.Services
             public double BottomClearanceMm { get; set; }
             public double DefaultServiceGapMm { get; set; }
             public double GridMm { get; set; }
-            public bool ElectricalAboveWetServicesPenalty { get; set; }
+            public bool WetServicesAboveElectricalPenalty { get; set; }
             public IList<ForbiddenPair> ForbiddenPairs { get; set; }
             public SectionConstraints()
             {
                 SideClearanceMm = 50; TopClearanceMm = 50; BottomClearanceMm = 50;
                 DefaultServiceGapMm = 50; GridMm = 25;
-                ElectricalAboveWetServicesPenalty = true;
+                WetServicesAboveElectricalPenalty = true;
                 ForbiddenPairs = new List<ForbiddenPair>();
             }
         }
@@ -231,9 +231,9 @@ namespace AlignTool.Services
                 double rule = RuleDistance(ia, ib, c);
                 if (rule > 0 && Math.Sqrt(dx * dx + dy * dy) < rule)
                 { result.RuleViolations++; cost += w.DisciplineRule; }
-                if (c.ElectricalAboveWetServicesPenalty &&
-                    ((IsElectrical(ia.Discipline) && IsWet(ib.Discipline) && a.Ymm > b.Ymm) ||
-                     (IsElectrical(ib.Discipline) && IsWet(ia.Discipline) && b.Ymm > a.Ymm)))
+                if (c.WetServicesAboveElectricalPenalty &&
+                    ((IsElectrical(ia.Discipline) && IsWet(ib.Discipline) && b.Ymm > a.Ymm) ||
+                     (IsElectrical(ib.Discipline) && IsWet(ia.Discipline) && a.Ymm > b.Ymm)))
                     cost += w.DisciplineRule * 0.5;
             }
             cost += ((maxX * maxY) / Math.Max(1, c.WidthMm * c.HeightMm)) * 1000 * w.Compactness;
