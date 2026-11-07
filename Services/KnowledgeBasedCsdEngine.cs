@@ -218,7 +218,8 @@ namespace AlignTool.Services
                 ServiceItem ia = byId[a.ServiceId], ib = byId[b.ServiceId];
                 double dx = AxisGap(a.Xmm, a.WidthMm, b.Xmm, b.WidthMm);
                 double dy = AxisGap(a.Ymm, a.HeightMm, b.Ymm, b.HeightMm);
-                bool overlap = a.Xmm < b.Xmm + b.WidthMm && a.Xmm + a.WidthMm > b.Xmm\n                    && a.Ymm < b.Ymm + b.HeightMm && a.Ymm + a.HeightMm > b.Ymm;
+                bool overlap = a.Xmm < b.Xmm + b.WidthMm && a.Xmm + a.WidthMm > b.Xmm
+                    && a.Ymm < b.Ymm + b.HeightMm && a.Ymm + a.HeightMm > b.Ymm;
                 if (overlap) { result.Clashes++; cost += w.Clash; }
                 else
                 {
