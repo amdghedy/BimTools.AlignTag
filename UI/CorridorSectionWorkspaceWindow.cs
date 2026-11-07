@@ -44,7 +44,7 @@ namespace AlignTool.UI
             MinWidth = 1050;
             MinHeight = 650;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(245, 247, 251));
+            Background = new SolidColorBrush(System.Windows.Media.System.Windows.Media.Color.FromRgb(245, 247, 251));
 
             var root = new DockPanel { Margin = new Thickness(16) };
             var header = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
@@ -53,7 +53,7 @@ namespace AlignTool.UI
                 Text = "MULTI-SECTION CORRIDOR WORKSPACE",
                 FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(32, 45, 64))
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(32, 45, 64))
             });
             header.Children.Add(new TextBlock
             {
@@ -127,7 +127,7 @@ namespace AlignTool.UI
             itemPanel.Children.Add(itemTitle);
             ConfigureGrid(_items);
             itemPanel.Children.Add(_items);
-            Grid.SetColumn(itemPanel, 1);
+            System.Windows.Controls.Grid.SetColumn(itemPanel, 1);
             body.Children.Add(itemPanel);
 
             var previewPanel = new DockPanel();
@@ -137,7 +137,7 @@ namespace AlignTool.UI
             _preview.Margin = new Thickness(0, 0, 0, 0);
             _preview.SizeChanged += (s, e) => DrawPreview();
             previewPanel.Children.Add(_preview);
-            Grid.SetColumn(previewPanel, 2);
+            System.Windows.Controls.Grid.SetColumn(previewPanel, 2);
             body.Children.Add(previewPanel);
 
             DockPanel.SetDock(_status, Dock.Bottom);
