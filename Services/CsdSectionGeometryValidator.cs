@@ -86,13 +86,15 @@ namespace AlignTool.Services
                     {
                         var movedPolygon = new PolygonData { ServiceId = polygon.ServiceId, Points = new List<Point2>() };
                         foreach (Point2 point in polygon.Points)
+                        {
                             double movedX = point.X - originX + dx;
-                        double movedY = point.Y - originY + dy;
-                        movedPolygon.Points.Add(new Point2 { X = movedX, Y = movedY });
-                        moved.MinX = Math.Min(moved.MinX, movedX);
-                        moved.MaxX = Math.Max(moved.MaxX, movedX);
-                        moved.MinY = Math.Min(moved.MinY, movedY);
-                        moved.MaxY = Math.Max(moved.MaxY, movedY);
+                            double movedY = point.Y - originY + dy;
+                            movedPolygon.Points.Add(new Point2 { X = movedX, Y = movedY });
+                            moved.MinX = Math.Min(moved.MinX, movedX);
+                            moved.MaxX = Math.Max(moved.MaxX, movedX);
+                            moved.MinY = Math.Min(moved.MinY, movedY);
+                            moved.MaxY = Math.Max(moved.MaxY, movedY);
+                        }
                         moved.Polygons.Add(movedPolygon);
                     }
                     proposed.Add(moved);
