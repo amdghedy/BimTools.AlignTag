@@ -39,6 +39,7 @@ namespace AlignTool.Services
             public string OwnerKey { get; set; }
             public string OwnerUniqueId { get; set; }
             public string ModelName { get; set; }
+            public string SourcePrefix { get; set; }
             public int ConnectorId { get; set; }
             public IList<string> ResolvedReferences { get; set; }
             public IList<string> UnresolvedReferences { get; set; }
@@ -288,7 +289,7 @@ namespace AlignTool.Services
                     var item = new ConnectorRecord
                     {
                         Key = connectorKey, OwnerKey = ownerKey, OwnerUniqueId = element.UniqueId,
-                        ModelName = result.Elements.Last().ModelName, ConnectorId = connector.Id,
+                        ModelName = result.Elements.Last().ModelName, SourcePrefix = ownerKey.Substring(0, ownerKey.IndexOf(':')), ConnectorId = connector.Id,
                         ResolvedReferences = new List<string>(), UnresolvedReferences = new List<string>(),
                         ConnectorType = connector.ConnectorType.ToString(),
                         Domain = connector.Domain.ToString(), Shape = connector.Shape.ToString(),
@@ -314,7 +315,7 @@ namespace AlignTool.Services
                         string refKey = ownerKey + "/C" + reference.Id;
                         // Connector references are only resolved to records in the same source element
                         // document. A linked connector's counterpart is captured while that link is scanned.
-                        item.References.Add(result.Elements.Last().ModelName + "|" + reference.Owner.UniqueId + "/C" + reference.Id);
+                        item.References.Add(item.SourcePrefix + "|" + reference.Owner.UniqueId + "/C" + reference.Id);
                     }
                 }
                 catch { result.GeometryFailures++; }
@@ -324,7 +325,7 @@ namespace AlignTool.Services
         private static void ResolveConnectorReferences(ExtractionResult result)
         {
             var index = result.Connectors.ToDictionary(
-                x => x.ModelName + "|" + x.OwnerUniqueId + "/C" + x.ConnectorId,
+                x => x.SourcePrefix + "|" + x.OwnerUniqueId + "/C" + x.ConnectorId,
                 x => x, StringComparer.OrdinalIgnoreCase);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ConnectorRecord connector in result.Connectors)
