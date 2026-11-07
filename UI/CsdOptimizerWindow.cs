@@ -5,6 +5,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using AlignTool.Services;
 using Microsoft.Win32;
 
@@ -18,6 +20,7 @@ namespace AlignTool.UI
         private readonly KnowledgeBasedCsdEngine.SectionConstraints _constraints;
         private readonly DataGrid _candidateGrid;
         private readonly DataGrid _placementGrid;
+        private readonly Canvas _sectionCanvas;
         private readonly ComboBox _grade;
         private readonly TextBox _comment;
         private readonly TextBlock _status;
@@ -94,7 +97,14 @@ namespace AlignTool.UI
             Grid.SetColumn(left, 0); split.Children.Add(left);
 
             var right = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
-            right.Children.Add(new TextBlock { Text = "PROPOSED SERVICE POSITIONS (mm)", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            right.Children.Add(new TextBlock { Text = "PROPOSED SECTION PREVIEW", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            _sectionCanvas = new Canvas { Width = 520, Height = 250, Background = Brushes.WhiteSmoke, ClipToBounds = true };
+            var previewBorder = new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Child = _sectionCanvas, Margin = new Thickness(0, 0, 0, 8) };
+            DockPanel.SetDock(previewBorder, Dock.Top);
+            right.Children.Add(previewBorder);
+            var placementHeader = new TextBlock { Text = "PROPOSED SERVICE POSITIONS (mm)", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) };
+            DockPanel.SetDock(placementHeader, Dock.Top);
+            right.Children.Add(placementHeader);
             _placementGrid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column };
             AddColumn(_placementGrid, "Element", "ElementName", 180);
             AddColumn(_placementGrid, "System", "SystemName", 110);
@@ -123,6 +133,7 @@ namespace AlignTool.UI
             CandidateRow row = _candidateGrid.SelectedItem as CandidateRow;
             if (row == null) return;
             var byId = _extraction.Items.ToDictionary(x => x.Id, x => x);
+            DrawSectionPreview(row.Candidate);
             _placementGrid.ItemsSource = row.Candidate.Placements.Select(p =>
             {
                 KnowledgeBasedCsdEngine.ServiceItem item;
@@ -145,6 +156,111 @@ namespace AlignTool.UI
                 " | Rule violations: " + row.Candidate.RuleViolations +
                 " | NDCG@5: " + KnowledgeBasedCsdEngine.CalculateNdcg(
                     _solve.Candidates, _assessments, 5).ToString("F3");
+        }
+
+        private void DrawSectionPreview(KnowledgeBasedCsdEngine.Candidate candidate)
+        {
+            _sectionCanvas.Children.Clear();
+            const double margin = 12;
+            double availableWidth = _sectionCanvas.Width - margin * 2;
+            double availableHeight = _sectionCanvas.Height - margin * 2;
+            double scale = Math.Min(availableWidth / Math.Max(1, _constraints.WidthMm),
+                availableHeight / Math.Max(1, _constraints.HeightMm));
+            double sectionWidth = _constraints.WidthMm * scale;
+            double sectionHeight = _constraints.HeightMm * scale;
+            double left = (_sectionCanvas.Width - sectionWidth) / 2;
+            double top = (_sectionCanvas.Height - sectionHeight) / 2;
+
+            var boundary = new Rectangle
+            {
+                Width = sectionWidth, Height = sectionHeight,
+                Stroke = Brushes.DimGray, StrokeThickness = 1.5,
+                Fill = Brushes.White
+            };
+            Canvas.SetLeft(boundary, left);
+            Canvas.SetTop(boundary, top);
+            _sectionCanvas.Children.Add(boundary);
+
+            foreach (var placement in candidate.Placements)
+            {
+                var item = _extraction.Items.FirstOrDefault(x =>
+                    string.Equals(x.Id, placement.ServiceId, StringComparison.OrdinalIgnoreCase));
+                string discipline = item == null ? "" : item.Discipline;
+                Brush fill = GetDisciplineBrush(discipline);
+                double w = Math.Max(3, placement.WidthMm * scale);
+                double h = Math.Max(3, placement.HeightMm * scale);
+                double x = left + placement.Xmm * scale;
+                double y = top + sectionHeight - (placement.Ymm + placement.HeightMm) * scale;
+
+                var shape = new Rectangle
+                {
+                    Width = w, Height = h, Fill = fill,
+                    Stroke = Brushes.Black, StrokeThickness = 0.7,
+                    ToolTip = (item == null ? placement.ServiceId : item.Name) +
+                        Environment.NewLine + discipline +
+                        Environment.NewLine + placement.WidthMm.ToString("F0") + " x " +
+                        placement.HeightMm.ToString("F0") + " mm"
+                };
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                _sectionCanvas.Children.Add(shape);
+
+                if (w >= 32 && h >= 13)
+                {
+                    var label = new TextBlock
+                    {
+                        Text = item == null ? placement.ServiceId : ShortLabel(item.Name),
+                        FontSize = 8, Foreground = Brushes.Black,
+                        Width = Math.Max(20, w - 4),
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        IsHitTestVisible = false
+                    };
+                    Canvas.SetLeft(label, x + 2);
+                    Canvas.SetTop(label, y + Math.Max(0, (h - 12) / 2));
+                    _sectionCanvas.Children.Add(label);
+                }
+            }
+
+            AddLegend("HVAC", Brushes.LightSkyBlue, 12);
+            AddLegend("Plumbing", Brushes.LightGreen, 95);
+            AddLegend("Electrical", Brushes.Khaki, 205);
+            var note = new TextBlock
+            {
+                Text = "Schematic solver section - not a true-to-scale route projection",
+                FontSize = 8, Foreground = Brushes.DimGray
+            };
+            Canvas.SetLeft(note, 12);
+            Canvas.SetTop(note, _sectionCanvas.Height - 13);
+            _sectionCanvas.Children.Add(note);
+        }
+
+        private void AddLegend(string text, Brush brush, double x)
+        {
+            var swatch = new Rectangle { Width = 9, Height = 9, Fill = brush, Stroke = Brushes.Gray, StrokeThickness = 0.5 };
+            Canvas.SetLeft(swatch, x);
+            Canvas.SetTop(swatch, 4);
+            _sectionCanvas.Children.Add(swatch);
+            var label = new TextBlock { Text = text, FontSize = 9, Foreground = Brushes.Black };
+            Canvas.SetLeft(label, x + 12);
+            Canvas.SetTop(label, 2);
+            _sectionCanvas.Children.Add(label);
+        }
+
+        private static Brush GetDisciplineBrush(string discipline)
+        {
+            if ((discipline ?? "").IndexOf("plumb", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                (discipline ?? "").IndexOf("pipe", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Brushes.LightGreen;
+            if ((discipline ?? "").IndexOf("elect", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                (discipline ?? "").IndexOf("cable", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Brushes.Khaki;
+            return Brushes.LightSkyBlue;
+        }
+
+        private static string ShortLabel(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            return value.Length <= 18 ? value : value.Substring(0, 18);
         }
 
         private void RecordAssessment(object sender, RoutedEventArgs e)
