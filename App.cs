@@ -68,6 +68,7 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("UniversalAlignBottom", "Bottom", "AlignTool.Commands.UniversalAlignBottomCommand", "Align supported tag heads to the bottom.", null, "align_bottom"));
                 RibbonHelper.AddPushButton(pUniversal, "UniversalDistH", "Dist H", "AlignTool.Commands.UniversalDistributeHorizontalCommand", "Evenly distribute supported tags along the view horizontal axis.", null, "dist_h");
                 RibbonHelper.AddPushButton(pUniversal, "UniversalDistV", "Dist V", "AlignTool.Commands.UniversalDistributeVerticalCommand", "Evenly distribute supported tags along the view vertical axis.", null, "dist_v");
+                RibbonHelper.AddPushButton(pUniversal, "UniversalSelectAll", "All View", "AlignTool.Commands.UniversalSelectAllTagsInViewCommand", "Select every supported annotation tag visible in the active view.", null, "select_all");
 
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
