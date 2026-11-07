@@ -41,3 +41,19 @@ The extraction adapter traverses loaded RevitLinkInstance documents and applies 
 Open a Revit 2020 project, activate the intended section/coordination view, optionally select the native MEP elements to analyse, then choose **BIM TOOLS > ALIGN > CSD Optimize**. Review the alternatives and export a candidate report if required.
 
 This is an engineering-assistance prototype, not an automatically approved coordinated shop drawing. A qualified MEP engineer must validate all clearances, levels, access, maintainability and project requirements.
+
+
+## Intelligent 3D coordination foundation (development branch)
+
+Added `Services/Csd3DCoordinationEngine.cs`, a Revit-independent analysis core:
+- 3D route segments use swept circular envelopes with separate outside radius and insulation thickness.
+- AABB broad-phase filtering precedes segment-to-segment closest-distance checks for hard intersections and required service clearance.
+- Expected connector pairs are checked for missing references, domain compatibility and allowed endpoint gap; open connectors without an expected link are warnings.
+- Multiple oriented section stations report required services missing at each corridor station.
+- Maintenance/access volumes are checked against insulation-inclusive segment bounds. This is a conservative AABB screening test, not exact solid-to-volume intersection.
+- Measured and proxy segment counts are kept separate.
+- The engineer approval gate requires a named engineer, project profile, review of geometry/connectors/sections/clearances/clashes and explicit approval. It never starts a Revit transaction and always returns `CanModifyRevitModel = false`.
+
+### Scope boundary
+
+This is the analysis-engine foundation, not the completed Revit integration. It does not yet extract full routed solids, fitting bodies, connector graphs or access zones from a live Revit model, and it does not yet drive candidate movements through a 3D route solver. Its narrow phase is a swept-envelope centreline-distance calculation, not Boolean intersection of native Revit solids. Section checks report route presence at defined planes, not reconstructed solid sections. Those model adapters, candidate geometry transforms and Revit 2020 model-based validation remain the next tasks. No Revit elements are modified.
