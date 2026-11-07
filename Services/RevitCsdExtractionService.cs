@@ -357,8 +357,7 @@ namespace AlignTool.Services
                     try
                     {
                         if (solid.Faces.Size == 0 || solid.Volume <= 1e-12) continue;
-                        Solid hostSolid = toHost == null || toHost.IsIdentity
-                            ? solid : SolidUtils.CreateTransformed(solid, toHost);
+                        Solid hostSolid = SolidUtils.CreateTransformed(solid, toHost ?? Transform.Identity);
                         if (hostSolid != null && hostSolid.Faces.Size > 0 && hostSolid.Volume > 1e-12)
                             output.Add(new SolidSource { Geometry = hostSolid, Kind = kind });
                     }
@@ -422,9 +421,9 @@ namespace AlignTool.Services
             {
                 PlanarFace planar = face as PlanarFace;
                 if (planar == null) continue;
-                if (planar.FaceNormal.Normalize().DotProduct(normal) < 0.999) continue;
-                double offset = Math.Abs((planar.Origin - origin).DotProduct(normal) -
-                    SectionSlabThicknessFeet * 0.5);
+                if (Math.Abs(planar.FaceNormal.Normalize().DotProduct(normal)) < 0.999) continue;
+                double signedOffset = (planar.Origin - origin).DotProduct(normal);
+                double offset = Math.Abs(Math.Abs(signedOffset) - SectionSlabThicknessFeet * 0.5);
                 if (offset < bestOffset) { bestOffset = offset; selectedFace = planar; }
             }
             if (selectedFace == null) return result;
