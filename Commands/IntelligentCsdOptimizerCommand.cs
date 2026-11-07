@@ -33,9 +33,9 @@ namespace AlignTool.Commands
                 if (extraction.Items.Count == 0)
                 {
                     TaskDialog.Show("Intelligent CSD Optimizer",
-                        "No supported native MEP elements were found in the selection or active view. " +
+                        "No supported MEP elements were found in the selection, active view or loaded linked models. " +
                         "Supported categories include ducts, pipes, fittings, accessories, cable trays, conduits and MEP equipment. " +
-                        "Linked-model extraction is not included in this first adapter.");
+                        "Loaded Revit links are traversed using each link instance transform; unloadable links are skipped.");
                     return Result.Cancelled;
                 }
 
