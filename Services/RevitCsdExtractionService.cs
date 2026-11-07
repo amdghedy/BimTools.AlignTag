@@ -108,9 +108,7 @@ namespace AlignTool.Services
                         .WhereElementIsNotElementType().ToElements())
                     {
                         if (!IsMepElement(linkedElement)) continue;
-                        XYZ localCentre = GetElementCentre(linkedElement);
-                        XYZ hostCentre = localCentre == null ? null : transform.OfPoint(localCentre);
-                        if (hostCentre == null || !IsInsideActiveCrop(view, hostCentre)) continue;
+                        if (!IntersectsActiveCrop(view, linkedElement, transform)) continue;
                         sources.Add(new SourceElement
                         {
                             Element = linkedElement, ToHost = transform,
@@ -469,20 +467,43 @@ namespace AlignTool.Services
             public string ModelName;
         }
 
-        private static bool IsInsideActiveCrop(View view, XYZ hostPoint)
+        private static bool IntersectsActiveCrop(View view, Element element, Transform toHost)
         {
             try
             {
                 if (!view.CropBoxActive) return true;
                 BoundingBoxXYZ crop = view.CropBox;
-                if (crop == null) return true;
-                XYZ local = (crop.Transform ?? Transform.Identity).Inverse.OfPoint(hostPoint);
+                BoundingBoxXYZ box = element.get_BoundingBox(null);
+                if (crop == null || box == null) return true;
+
+                Transform boxTransform = box.Transform ?? Transform.Identity;
+                Transform cropInverse = (crop.Transform ?? Transform.Identity).Inverse;
+                double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+                double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+                for (int ix = 0; ix <= 1; ix++)
+                for (int iy = 0; iy <= 1; iy++)
+                for (int iz = 0; iz <= 1; iz++)
+                {
+                    XYZ local = new XYZ(ix == 0 ? box.Min.X : box.Max.X,
+                        iy == 0 ? box.Min.Y : box.Max.Y,
+                        iz == 0 ? box.Min.Z : box.Max.Z);
+                    XYZ host = toHost.OfPoint(boxTransform.OfPoint(local));
+                    XYZ cropLocal = cropInverse.OfPoint(host);
+                    minX = Math.Min(minX, cropLocal.X); maxX = Math.Max(maxX, cropLocal.X);
+                    minY = Math.Min(minY, cropLocal.Y); maxY = Math.Max(maxY, cropLocal.Y);
+                    minZ = Math.Min(minZ, cropLocal.Z); maxZ = Math.Max(maxZ, cropLocal.Z);
+                }
                 const double tolerance = 0.01;
-                return local.X >= crop.Min.X - tolerance && local.X <= crop.Max.X + tolerance &&
-                       local.Y >= crop.Min.Y - tolerance && local.Y <= crop.Max.Y + tolerance &&
-                       local.Z >= crop.Min.Z - tolerance && local.Z <= crop.Max.Z + tolerance;
+                return maxX >= crop.Min.X - tolerance && minX <= crop.Max.X + tolerance &&
+                       maxY >= crop.Min.Y - tolerance && minY <= crop.Max.Y + tolerance &&
+                       maxZ >= crop.Min.Z - tolerance && minZ <= crop.Max.Z + tolerance;
             }
-            catch { return true; }
+            catch
+            {
+                // If a crop/bounding-box query fails, retain the item rather than silently
+                // discarding a potentially intersecting linked route.
+                return true;
+            }
         }
 
         private static bool IsMepElement(Element e)
