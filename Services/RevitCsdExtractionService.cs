@@ -159,10 +159,16 @@ namespace AlignTool.Services
                     string discipline = GetDiscipline(element);
                     string name = (element.Name ?? element.GetType().Name) + " [" + source.ModelName + "]";
                     result.ElementsTestedForSection++;
+                    int solidIntersections = result.SolidIntersections;
+                    int solidIntersectionFailures = result.SolidIntersectionFailures;
+                    int insulationLiningElements = result.InsulationLiningElements;
                     IList<SectionProjectionItem> projected = ProjectElementToSection(
                         element, source.ToHost, right, up, view.ViewDirection.Normalize(),
-                        origin, uniqueId, name, discipline, ref result.SolidIntersections,
-                        ref result.SolidIntersectionFailures, ref result.InsulationLiningElements);
+                        origin, uniqueId, name, discipline, ref solidIntersections,
+                        ref solidIntersectionFailures, ref insulationLiningElements);
+                    result.SolidIntersections = solidIntersections;
+                    result.SolidIntersectionFailures = solidIntersectionFailures;
+                    result.InsulationLiningElements = insulationLiningElements;
                     if (projected.Count == 0) result.ElementsOutsideSection++;
                     else
                     {
