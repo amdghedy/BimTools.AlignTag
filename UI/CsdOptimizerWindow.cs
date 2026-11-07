@@ -172,6 +172,9 @@ namespace AlignTool.UI
                 " | Boundary: " + row.Candidate.BoundaryViolations +
                 " | Clashes: " + row.Candidate.Clashes +
                 " | Rule violations: " + row.Candidate.RuleViolations +
+                " | Measured profile overlaps: " + row.SolidProfileClashes +
+                " | Measured boundary violations: " + row.GeometryBoundaryViolations +
+                " | Geometry: " + row.GeometryStatus +
                 " | NDCG@5: " + KnowledgeBasedCsdEngine.CalculateNdcg(
                     _solve.Candidates, _assessments, 5).ToString("F3");
         }
