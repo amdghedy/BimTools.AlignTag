@@ -1,0 +1,224 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using AlignTool.Services;
+using Microsoft.Win32;
+
+namespace AlignTool.UI
+{
+    /// <summary>Interactive candidate review. This window never edits Revit elements.</summary>
+    public sealed class CsdOptimizerWindow : Window
+    {
+        private readonly RevitCsdExtractionService.ExtractionResult _extraction;
+        private readonly KnowledgeBasedCsdEngine.SolveResult _solve;
+        private readonly KnowledgeBasedCsdEngine.SectionConstraints _constraints;
+        private readonly DataGrid _candidateGrid;
+        private readonly DataGrid _placementGrid;
+        private readonly ComboBox _grade;
+        private readonly TextBox _comment;
+        private readonly TextBlock _status;
+        private readonly List<KnowledgeBasedCsdEngine.EngineerAssessment> _assessments =
+            new List<KnowledgeBasedCsdEngine.EngineerAssessment>();
+
+        public CsdOptimizerWindow(RevitCsdExtractionService.ExtractionResult extraction,
+            KnowledgeBasedCsdEngine.SolveResult solve,
+            KnowledgeBasedCsdEngine.SectionConstraints constraints)
+        {
+            _extraction = extraction;
+            _solve = solve;
+            _constraints = constraints;
+            Title = "BIM TOOLS ALIGN - Intelligent CSD Optimizer";
+            Width = 1120; Height = 720; MinWidth = 900; MinHeight = 560;
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Background = System.Windows.Media.Brushes.White;
+
+            var root = new DockPanel { Margin = new Thickness(14) };
+            Content = root;
+            var header = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
+            header.Children.Add(new TextBlock
+            {
+                Text = "INTELLIGENT MEP COMPOSITE SECTION",
+                FontSize = 19, FontWeight = FontWeights.SemiBold,
+                Foreground = System.Windows.Media.Brushes.DarkSlateBlue
+            });
+            header.Children.Add(new TextBlock
+            {
+                Text = extraction.SourceDescription + "  |  " + extraction.Items.Count +
+                    " MEP elements  |  " + extraction.ConnectorCount + " connectors  |  " +
+                    extraction.ElementsWithoutConnectors + " without connectors  |  " +
+                    extraction.SkippedElements + " skipped",
+                Margin = new Thickness(0, 4, 0, 0), Foreground = System.Windows.Media.Brushes.DimGray
+            });
+            DockPanel.SetDock(header, Dock.Top);
+            root.Children.Add(header);
+
+            var footer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 10, 0, 0) };
+            _status = new TextBlock { Text = "Select a candidate to inspect its proposed section positions.", Margin = new Thickness(0, 0, 0, 8) };
+            footer.Children.Add(_status);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            _grade = new ComboBox { Width = 100, Margin = new Thickness(0, 0, 8, 0), ItemsSource = new[] { "1 - Poor", "2 - Fair", "3 - Acceptable", "4 - Good", "5 - Excellent" }, SelectedIndex = 2 };
+            _comment = new TextBox { Width = 260, Height = 26, Margin = new Thickness(0, 0, 8, 0), ToolTip = "Engineering review comment" };
+            var assess = new Button { Content = "Record engineer grade", Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 8, 0) };
+            assess.Click += RecordAssessment;
+            var export = new Button { Content = "Export candidate CSV", Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 8, 0) };
+            export.Click += ExportCsv;
+            var close = new Button { Content = "Close", Padding = new Thickness(18, 5, 18, 5) };
+            close.Click += (s, e) => Close();
+            actions.Children.Add(_grade); actions.Children.Add(_comment);
+            actions.Children.Add(assess); actions.Children.Add(export); actions.Children.Add(close);
+            footer.Children.Add(actions);
+            DockPanel.SetDock(footer, Dock.Bottom);
+            root.Children.Add(footer);
+
+            var split = new Grid();
+            split.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.9, GridUnitType.Star) });
+            split.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.1, GridUnitType.Star) });
+            root.Children.Add(split);
+
+            var left = new DockPanel { Margin = new Thickness(0, 0, 8, 0) };
+            left.Children.Add(new TextBlock { Text = "RANKED ARRANGEMENT OPTIONS", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            _candidateGrid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column };
+            AddColumn(_candidateGrid, "Option", "Id", 90);
+            AddColumn(_candidateGrid, "Strategy", "Strategy", 150);
+            AddColumn(_candidateGrid, "Cost", "CostText", 90);
+            AddColumn(_candidateGrid, "Clashes", "Clashes", 65);
+            AddColumn(_candidateGrid, "Clearance", "ClearanceViolations", 75);
+            AddColumn(_candidateGrid, "Rules", "RuleViolations", 55);
+            _candidateGrid.SelectionChanged += CandidateChanged;
+            _candidateGrid.ItemsSource = solve.Candidates.Select(c => new CandidateRow(c)).ToList();
+            left.Children.Add(_candidateGrid);
+            Grid.SetColumn(left, 0); split.Children.Add(left);
+
+            var right = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
+            right.Children.Add(new TextBlock { Text = "PROPOSED SERVICE POSITIONS (mm)", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            _placementGrid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column };
+            AddColumn(_placementGrid, "Element", "ElementName", 180);
+            AddColumn(_placementGrid, "System", "SystemName", 110);
+            AddColumn(_placementGrid, "Discipline", "Discipline", 85);
+            AddColumn(_placementGrid, "Width", "WidthText", 65);
+            AddColumn(_placementGrid, "Height", "HeightText", 65);
+            AddColumn(_placementGrid, "X", "XText", 65);
+            AddColumn(_placementGrid, "Y", "YText", 65);
+            right.Children.Add(_placementGrid);
+            Grid.SetColumn(right, 1); split.Children.Add(right);
+
+            if (_candidateGrid.Items.Count > 0) _candidateGrid.SelectedIndex = 0;
+        }
+
+        private static void AddColumn(DataGrid grid, string title, string path, double width)
+        {
+            grid.Columns.Add(new DataGridTextColumn
+            {
+                Header = title, Binding = new Binding(path),
+                Width = new DataGridLength(width)
+            });
+        }
+
+        private void CandidateChanged(object sender, SelectionChangedEventArgs e)
+        {
+            CandidateRow row = _candidateGrid.SelectedItem as CandidateRow;
+            if (row == null) return;
+            var byId = _extraction.Items.ToDictionary(x => x.Id, x => x);
+            _placementGrid.ItemsSource = row.Candidate.Placements.Select(p =>
+            {
+                KnowledgeBasedCsdEngine.ServiceItem item;
+                byId.TryGetValue(p.ServiceId, out item);
+                return new PlacementRow
+                {
+                    ElementName = item == null ? p.ServiceId : item.Name,
+                    SystemName = item == null ? "" : item.SystemName,
+                    Discipline = item == null ? "" : item.Discipline,
+                    WidthText = p.WidthMm.ToString("F0"),
+                    HeightText = p.HeightMm.ToString("F0"),
+                    XText = p.Xmm.ToString("F0"),
+                    YText = p.Ymm.ToString("F0")
+                };
+            }).ToList();
+            _status.Text = row.Candidate.Id + " - " + row.Candidate.Strategy +
+                " | Fitness: " + row.Candidate.Fitness.ToString("P2") +
+                " | Boundary: " + row.Candidate.BoundaryViolations +
+                " | Clashes: " + row.Candidate.Clashes +
+                " | Rule violations: " + row.Candidate.RuleViolations +
+                " | NDCG@5: " + KnowledgeBasedCsdEngine.CalculateNdcg(
+                    _solve.Candidates, _assessments, 5).ToString("F3");
+        }
+
+        private void RecordAssessment(object sender, RoutedEventArgs e)
+        {
+            CandidateRow row = _candidateGrid.SelectedItem as CandidateRow;
+            if (row == null || _grade.SelectedIndex < 0) return;
+            _assessments.RemoveAll(x => x.CandidateId == row.Candidate.Id);
+            _assessments.Add(new KnowledgeBasedCsdEngine.EngineerAssessment
+            {
+                CandidateId = row.Candidate.Id,
+                Grade = _grade.SelectedIndex + 1,
+                Comment = _comment.Text,
+                AssessedUtc = DateTime.UtcNow
+            });
+            _status.Text = "Grade recorded for " + row.Candidate.Id + ". NDCG@5: " +
+                KnowledgeBasedCsdEngine.CalculateNdcg(_solve.Candidates, _assessments, 5).ToString("F3") +
+                ". Assessment remains in this session; no model changes were made.";
+        }
+
+        private void ExportCsv(object sender, RoutedEventArgs e)
+        {
+            CandidateRow row = _candidateGrid.SelectedItem as CandidateRow;
+            if (row == null) return;
+            var dialog = new SaveFileDialog { Filter = "CSV files (*.csv)|*.csv", FileName = row.Candidate.Id + "_CSD.csv" };
+            if (dialog.ShowDialog(this) != true) return;
+            var byId = _extraction.Items.ToDictionary(x => x.Id, x => x);
+            using (var writer = new StreamWriter(dialog.FileName, false, System.Text.Encoding.UTF8))
+            {
+                writer.WriteLine("ElementId,Element,System,Discipline,WidthMm,HeightMm,Xmm,Ymm");
+                foreach (var p in row.Candidate.Placements)
+                {
+                    KnowledgeBasedCsdEngine.ServiceItem item;
+                    byId.TryGetValue(p.ServiceId, out item);
+                    writer.WriteLine(string.Join(",", new[]
+                    {
+                        Csv(p.ServiceId), Csv(item == null ? "" : item.Name),
+                        Csv(item == null ? "" : item.SystemName), Csv(item == null ? "" : item.Discipline),
+                        p.WidthMm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        p.HeightMm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        p.Xmm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        p.Ymm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+                    }));
+                }
+            }
+            _status.Text = "Candidate exported. This is an analysis report, not a construction-approved layout.";
+        }
+
+        private static string Csv(string value)
+        {
+            value = value ?? "";
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        private sealed class CandidateRow
+        {
+            public KnowledgeBasedCsdEngine.Candidate Candidate { get; private set; }
+            public string Id { get { return Candidate.Id; } }
+            public string Strategy { get { return Candidate.Strategy; } }
+            public string CostText { get { return Candidate.Cost.ToString("F1"); } }
+            public int Clashes { get { return Candidate.Clashes; } }
+            public int ClearanceViolations { get { return Candidate.ClearanceViolations; } }
+            public int RuleViolations { get { return Candidate.RuleViolations; } }
+            public CandidateRow(KnowledgeBasedCsdEngine.Candidate candidate) { Candidate = candidate; }
+        }
+
+        private sealed class PlacementRow
+        {
+            public string ElementName { get; set; }
+            public string SystemName { get; set; }
+            public string Discipline { get; set; }
+            public string WidthText { get; set; }
+            public string HeightText { get; set; }
+            public string XText { get; set; }
+            public string YText { get; set; }
+        }
+    }
+}
