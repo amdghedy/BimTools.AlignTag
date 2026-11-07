@@ -27,12 +27,31 @@ jobs:
     - name: Build Release x64
       run: msbuild BimTools.Align.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m /v:minimal
 
+    - name: Validate release package inputs
+      shell: pwsh
+      run: |
+        $requiredFiles = @(
+          "bin/x64/Release/BimTools.Align.dll",
+          "bin/x64/Release/BimTools.Align.addin"
+        )
+
+        foreach ($file in $requiredFiles) {
+          if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "Required release output is missing: $file"
+          }
+          $item = Get-Item -LiteralPath $file
+          if ($item.Length -le 0) {
+            throw "Required release output is empty: $file"
+          }
+          Write-Host ("Validated {0} ({1} bytes)" -f $file, $item.Length)
+        }
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: BimTools.Align-Release
         path: |
-          **/bin/x64/Release/BimTools.Align.dll
-          **/bin/x64/Release/BimTools.Align.addin
-          **/bin/x64/Release/Resources/**
-        if-no-files-found: warn
+          bin/x64/Release/BimTools.Align.dll
+          bin/x64/Release/BimTools.Align.addin
+          bin/x64/Release/Resources/**
+        if-no-files-found: error
