@@ -76,6 +76,7 @@
     <Compile Include="Services\KnowledgeBasedCsdEngine.cs" />
     <Compile Include="Services\RevitCsdExtractionService.cs" />
     <Compile Include="Services\CsdSectionGeometryValidator.cs" />
+    <Compile Include="Services\Csd3DCoordinationEngine.cs" />
     <Compile Include="Commands\IntelligentCsdOptimizerCommand.cs" />
     <Compile Include="UI\CsdOptimizerWindow.cs" />
     <Compile Include="Commands\StraightenLeadersCommand.cs" />
