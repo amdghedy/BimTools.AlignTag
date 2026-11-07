@@ -77,6 +77,16 @@ namespace AlignTool
                 RibbonHelper.AddPushButton(pSelect, "UniversalSelectUnpinned", "Unpinned", "AlignTool.Commands.UniversalSelectUnpinnedTagsCommand", "Select supported unpinned annotation tags in the active view.", null, "unpin");
                 RibbonHelper.AddPushButton(pSelect, "UniversalInvertSelection", "Invert", "AlignTool.Commands.UniversalInvertTagSelectionCommand", "Invert the current selection among supported annotation tags in the active view.", null, "invert");
 
+                RibbonPanel pManage = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ANNOTATION MANAGER");
+                RibbonHelper.AddStackedTriple(pManage,
+                    RibbonHelper.CreatePushButtonData("AnnotationAlignH", "Align H", "AlignTool.Commands.AnnotationAlignHorizontalCommand", "Align selected text notes, dimensions and tags to a common horizontal centre.", null, "align_h"),
+                    RibbonHelper.CreatePushButtonData("AnnotationAlignV", "Align V", "AlignTool.Commands.AnnotationAlignVerticalCommand", "Align selected text notes, dimensions and tags to a common vertical centre.", null, "align_v"),
+                    RibbonHelper.CreatePushButtonData("AnnotationAudit", "Audit", "AlignTool.Commands.AnnotationQualityAuditCommand", "Audit selected annotations for visible-bound overlaps.", null, "audit"));
+                RibbonHelper.AddStackedTriple(pManage,
+                    RibbonHelper.CreatePushButtonData("AnnotationDistH", "Dist H", "AlignTool.Commands.AnnotationDistributeHorizontalCommand", "Evenly distribute selected annotation centres horizontally.", null, "dist_h"),
+                    RibbonHelper.CreatePushButtonData("AnnotationDistV", "Dist V", "AlignTool.Commands.AnnotationDistributeVerticalCommand", "Evenly distribute selected annotation centres vertically.", null, "dist_v"),
+                    RibbonHelper.CreatePushButtonData("AnnotationResolve", "Resolve", "AlignTool.Commands.AnnotationCollisionResolveCommand", "Preview and optionally resolve annotation overlaps; pinned items are skipped.", null, "untangle"));
+
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
             }
