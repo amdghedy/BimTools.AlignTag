@@ -24,10 +24,25 @@ namespace AlignTool.Services
             public int ElementsTestedForSection { get; set; }
             public int SectionIntersections { get; set; }
             public int ElementsOutsideSection { get; set; }
+            public int SolidIntersections { get; set; }
+            public int SolidIntersectionFailures { get; set; }
+            public int InsulationLiningElements { get; set; }
             public string SourceDescription { get; set; }
         }
 
-        /// <summary>Measured view-plane projection; route centreline/profile or conservative fitting/equipment bounding envelope.</summary>
+        public sealed class SectionPoint
+        {
+            public double Xmm { get; set; }
+            public double Ymm { get; set; }
+        }
+
+        public sealed class SectionContour
+        {
+            public IList<SectionPoint> Points { get; set; }
+            public bool IsHole { get; set; }
+        }
+
+        /// <summary>Cross-section contours obtained from a Revit solid intersected with a thin view-plane slab.</summary>
         public sealed class SectionProjectionItem
         {
             public string Id { get; set; }
@@ -39,6 +54,7 @@ namespace AlignTool.Services
             public double HeightMm { get; set; }
             public double PlaneOffsetMm { get; set; }
             public string ProjectionMethod { get; set; }
+            public IList<SectionContour> Contours { get; set; }
         }
 
         public static ExtractionResult Extract(Document doc, View view, IEnumerable<ElementId> selectedIds)
@@ -146,7 +162,8 @@ namespace AlignTool.Services
                     result.ElementsTestedForSection++;
                     IList<SectionProjectionItem> projected = ProjectElementToSection(
                         element, source.ToHost, right, up, view.ViewDirection.Normalize(),
-                        origin, uniqueId, name, discipline, width, height);
+                        origin, uniqueId, name, discipline, ref result.SolidIntersections,
+                        ref result.SolidIntersectionFailures, ref result.InsulationLiningElements);
                     if (projected.Count == 0) result.ElementsOutsideSection++;
                     else
                     {
@@ -182,103 +199,266 @@ namespace AlignTool.Services
         }
 
 
-        private const double SectionPlaneToleranceFeet = 0.0164041995; // 5 mm
+        private const double SectionSlabThicknessFeet = 0.00656167979; // 2 mm Boolean slice
+        private const double SectionExtentPaddingFeet = 1.64041995; // 500 mm around element bounds
 
         private static IList<SectionProjectionItem> ProjectElementToSection(
             Element element, Transform toHost, XYZ right, XYZ up, XYZ normal, XYZ origin,
-            string id, string name, string discipline, double profileWidthMm, double profileHeightMm)
+            string id, string name, string discipline, ref int successfulIntersections,
+            ref int failedIntersections, ref int insulationLiningElements)
         {
             var output = new List<SectionProjectionItem>();
-            MEPCurve mepCurve = element as MEPCurve;
-            LocationCurve location = element.Location as LocationCurve;
-            if (mepCurve != null && location != null && location.Curve != null)
+            IList<SolidSource> solids = new List<SolidSource>();
+            CollectElementSolids(element, toHost, "Host solid", solids, ref failedIntersections);
+
+            // Revit 2020 exposes duct/pipe insulation and duct lining as separate elements.
+            // Include their own solids so the visible outside envelope is not silently omitted.
+            try
             {
-                IList<XYZ> points;
-                try { points = location.Curve.Tessellate(); }
-                catch { points = new List<XYZ>(); }
-                var hits = new List<XYZ>();
-                for (int i = 0; i < points.Count - 1; i++)
+                ICollection<ElementId> insulationIds =
+                    InsulationLiningBase.GetInsulationIds(element.Document, element.Id);
+                foreach (ElementId insulationId in insulationIds)
                 {
-                    XYZ a = toHost.OfPoint(points[i]);
-                    XYZ b = toHost.OfPoint(points[i + 1]);
-                    double da = (a - origin).DotProduct(normal);
-                    double db = (b - origin).DotProduct(normal);
-                    if (Math.Abs(da) <= SectionPlaneToleranceFeet && Math.Abs(db) <= SectionPlaneToleranceFeet)
-                    {
-                        AddUniqueHit(hits, a);
-                        AddUniqueHit(hits, b);
-                    }
-                    else if ((da <= SectionPlaneToleranceFeet && db >= -SectionPlaneToleranceFeet) ||
-                             (db <= SectionPlaneToleranceFeet && da >= -SectionPlaneToleranceFeet))
-                    {
-                        double denominator = da - db;
-                        if (Math.Abs(denominator) < 1e-9) continue;
-                        double t = da / denominator;
-                        if (t >= -0.000001 && t <= 1.000001)
-                            AddUniqueHit(hits, a + (b - a) * Math.Max(0, Math.Min(1, t)));
-                    }
+                    Element insulation = element.Document.GetElement(insulationId);
+                    if (insulation == null) continue;
+                    insulationLiningElements++;
+                    CollectElementSolids(insulation, toHost, "Insulation", solids, ref failedIntersections);
                 }
-                foreach (XYZ hit in hits)
+            }
+            catch { }
+            try
+            {
+                ICollection<ElementId> liningIds =
+                    InsulationLiningBase.GetLiningIds(element.Document, element.Id);
+                foreach (ElementId liningId in liningIds)
                 {
-                    output.Add(new SectionProjectionItem
-                    {
-                        Id = id, Name = name, Discipline = discipline,
-                        CenterXmm = (hit - origin).DotProduct(right) * 304.8,
-                        CenterYmm = (hit - origin).DotProduct(up) * 304.8,
-                        WidthMm = Math.Max(10, profileWidthMm),
-                        HeightMm = Math.Max(10, profileHeightMm),
-                        PlaneOffsetMm = (hit - origin).DotProduct(normal) * 304.8,
-                        ProjectionMethod = "Route centreline / connector profile"
-                    });
+                    Element lining = element.Document.GetElement(liningId);
+                    if (lining == null) continue;
+                    insulationLiningElements++;
+                    CollectElementSolids(lining, toHost, "Lining", solids, ref failedIntersections);
                 }
-                if (output.Count > 0) return output;
-                // Do not substitute a full-length route bounding box when the centreline misses the plane.
+            }
+            catch { }
+
+            if (solids.Count == 0) return output;
+            BoundingBoxXYZ elementBox = null;
+            try { elementBox = element.get_BoundingBox(null); } catch { }
+            if (elementBox == null)
+            {
+                failedIntersections += solids.Count;
                 return output;
             }
 
-            // Fittings/accessories/equipment use a conservative transformed 3D box envelope.
-            BoundingBoxXYZ box = null;
-            try { box = element.get_BoundingBox(null); } catch { }
-            if (box == null) return output;
-            Transform boxTransform = box.Transform ?? Transform.Identity;
-            double minDistance = double.MaxValue, maxDistance = double.MinValue;
             double minX = double.MaxValue, maxX = double.MinValue;
             double minY = double.MaxValue, maxY = double.MinValue;
+            Transform boxTransform = elementBox.Transform ?? Transform.Identity;
             for (int ix = 0; ix <= 1; ix++)
             for (int iy = 0; iy <= 1; iy++)
             for (int iz = 0; iz <= 1; iz++)
             {
-                XYZ local = new XYZ(ix == 0 ? box.Min.X : box.Max.X,
-                    iy == 0 ? box.Min.Y : box.Max.Y, iz == 0 ? box.Min.Z : box.Max.Z);
+                XYZ local = new XYZ(ix == 0 ? elementBox.Min.X : elementBox.Max.X,
+                    iy == 0 ? elementBox.Min.Y : elementBox.Max.Y,
+                    iz == 0 ? elementBox.Min.Z : elementBox.Max.Z);
                 XYZ host = toHost.OfPoint(boxTransform.OfPoint(local));
-                double distance = (host - origin).DotProduct(normal);
-                double x = (host - origin).DotProduct(right) * 304.8;
-                double y = (host - origin).DotProduct(up) * 304.8;
-                minDistance = Math.Min(minDistance, distance);
-                maxDistance = Math.Max(maxDistance, distance);
+                double x = (host - origin).DotProduct(right);
+                double y = (host - origin).DotProduct(up);
                 minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
                 minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
             }
-            if (minDistance > SectionPlaneToleranceFeet || maxDistance < -SectionPlaneToleranceFeet)
-                return output;
-            output.Add(new SectionProjectionItem
+            minX -= SectionExtentPaddingFeet; maxX += SectionExtentPaddingFeet;
+            minY -= SectionExtentPaddingFeet; maxY += SectionExtentPaddingFeet;
+
+            Solid slab = CreateSectionSlab(origin, right, up, normal, minX, maxX, minY, maxY);
+            if (slab == null)
             {
-                Id = id, Name = name, Discipline = discipline,
-                CenterXmm = (minX + maxX) * 0.5,
-                CenterYmm = (minY + maxY) * 0.5,
-                WidthMm = Math.Max(10, maxX - minX),
-                HeightMm = Math.Max(10, maxY - minY),
-                PlaneOffsetMm = 0,
-                ProjectionMethod = "Conservative 3D bounding-box envelope"
-            });
+                failedIntersections += solids.Count;
+                return output;
+            }
+
+            foreach (SolidSource source in solids)
+            {
+                try
+                {
+                    Solid cut = BooleanOperationsUtils.ExecuteBooleanOperation(
+                        source.Geometry, slab, BooleanOperationsType.Intersect);
+                    if (cut == null || cut.Faces.Size == 0 || cut.Volume <= 1e-12) continue;
+
+                    IList<SectionContour> contours = ReadSectionContours(
+                        cut, right, up, normal, origin);
+                    if (contours.Count == 0) continue;
+
+                    double minContourX = double.MaxValue, maxContourX = double.MinValue;
+                    double minContourY = double.MaxValue, maxContourY = double.MinValue;
+                    int pointCount = 0;
+                    foreach (SectionContour contour in contours)
+                    foreach (SectionPoint point in contour.Points)
+                    {
+                        pointCount++;
+                        minContourX = Math.Min(minContourX, point.Xmm);
+                        maxContourX = Math.Max(maxContourX, point.Xmm);
+                        minContourY = Math.Min(minContourY, point.Ymm);
+                        maxContourY = Math.Max(maxContourY, point.Ymm);
+                    }
+                    if (pointCount < 3) continue;
+
+                    output.Add(new SectionProjectionItem
+                    {
+                        Id = id + ":" + source.Kind,
+                        Name = name + " (" + source.Kind + ")",
+                        Discipline = discipline,
+                        CenterXmm = (minContourX + maxContourX) * 0.5,
+                        CenterYmm = (minContourY + maxContourY) * 0.5,
+                        WidthMm = Math.Max(0.1, maxContourX - minContourX),
+                        HeightMm = Math.Max(0.1, maxContourY - minContourY),
+                        PlaneOffsetMm = 0,
+                        ProjectionMethod = "Revit solid Boolean intersection / " + source.Kind,
+                        Contours = contours
+                    });
+                    successfulIntersections++;
+                }
+                catch
+                {
+                    failedIntersections++;
+                }
+            }
             return output;
         }
 
-        private static void AddUniqueHit(IList<XYZ> hits, XYZ point)
+        private sealed class SolidSource
         {
-            foreach (XYZ existing in hits)
-                if (existing.DistanceTo(point) < 0.00656168) return; // 2 mm
-            hits.Add(point);
+            public Solid Geometry;
+            public string Kind;
+        }
+
+        private static void CollectElementSolids(Element element, Transform toHost, string kind,
+            IList<SolidSource> output, ref int failures)
+        {
+            try
+            {
+                var options = new Options
+                {
+                    ComputeReferences = false,
+                    IncludeNonVisibleObjects = true,
+                    DetailLevel = ViewDetailLevel.Fine
+                };
+                GeometryElement geometry = element.get_Geometry(options);
+                if (geometry == null) return;
+                CollectSolidsRecursive(geometry, toHost, kind, output, ref failures);
+            }
+            catch { failures++; }
+        }
+
+        private static void CollectSolidsRecursive(GeometryElement geometry, Transform toHost,
+            string kind, IList<SolidSource> output, ref int failures)
+        {
+            foreach (GeometryObject obj in geometry)
+            {
+                Solid solid = obj as Solid;
+                if (solid != null)
+                {
+                    try
+                    {
+                        if (solid.Faces.Size == 0 || solid.Volume <= 1e-12) continue;
+                        Solid hostSolid = toHost == null || toHost.IsIdentity
+                            ? solid : SolidUtils.CreateTransformed(solid, toHost);
+                        if (hostSolid != null && hostSolid.Faces.Size > 0 && hostSolid.Volume > 1e-12)
+                            output.Add(new SolidSource { Geometry = hostSolid, Kind = kind });
+                    }
+                    catch { failures++; }
+                    continue;
+                }
+
+                GeometryInstance instance = obj as GeometryInstance;
+                if (instance != null)
+                {
+                    try
+                    {
+                        // GetInstanceGeometry returns geometry in the element document's model coordinates.
+                        GeometryElement instanceGeometry = instance.GetInstanceGeometry();
+                        if (instanceGeometry != null)
+                            CollectSolidsRecursive(instanceGeometry, toHost, kind, output, ref failures);
+                    }
+                    catch { failures++; }
+                }
+            }
+        }
+
+        private static Solid CreateSectionSlab(XYZ origin, XYZ right, XYZ up, XYZ normal,
+            double minX, double maxX, double minY, double maxY)
+        {
+            try
+            {
+                double half = SectionSlabThicknessFeet * 0.5;
+                XYZ p0 = origin + right * minX + up * minY - normal * half;
+                XYZ p1 = origin + right * maxX + up * minY - normal * half;
+                XYZ p2 = origin + right * maxX + up * maxY - normal * half;
+                XYZ p3 = origin + right * minX + up * maxY - normal * half;
+                var loop = new CurveLoop();
+                if (right.CrossProduct(up).DotProduct(normal) >= 0)
+                {
+                    loop.Append(Line.CreateBound(p0, p1));
+                    loop.Append(Line.CreateBound(p1, p2));
+                    loop.Append(Line.CreateBound(p2, p3));
+                    loop.Append(Line.CreateBound(p3, p0));
+                }
+                else
+                {
+                    loop.Append(Line.CreateBound(p0, p3));
+                    loop.Append(Line.CreateBound(p3, p2));
+                    loop.Append(Line.CreateBound(p2, p1));
+                    loop.Append(Line.CreateBound(p1, p0));
+                }
+                return GeometryCreationUtilities.CreateExtrusionGeometry(
+                    new List<CurveLoop> { loop }, normal, SectionSlabThicknessFeet);
+            }
+            catch { return null; }
+        }
+
+        private static IList<SectionContour> ReadSectionContours(Solid cut,
+            XYZ right, XYZ up, XYZ normal, XYZ origin)
+        {
+            var result = new List<SectionContour>();
+            PlanarFace selectedFace = null;
+            double bestOffset = double.MaxValue;
+            foreach (Face face in cut.Faces)
+            {
+                PlanarFace planar = face as PlanarFace;
+                if (planar == null) continue;
+                if (planar.FaceNormal.Normalize().DotProduct(normal) < 0.999) continue;
+                double offset = Math.Abs((planar.Origin - origin).DotProduct(normal) -
+                    SectionSlabThicknessFeet * 0.5);
+                if (offset < bestOffset) { bestOffset = offset; selectedFace = planar; }
+            }
+            if (selectedFace == null) return result;
+
+            foreach (EdgeArray edgeLoop in selectedFace.EdgeLoops)
+            {
+                var points = new List<SectionPoint>();
+                foreach (Edge edge in edgeLoop)
+                {
+                    IList<XYZ> tessellated;
+                    try { tessellated = edge.AsCurve().Tessellate(); }
+                    catch { continue; }
+                    foreach (XYZ hostPoint in tessellated)
+                    {
+                        double x = (hostPoint - origin).DotProduct(right) * 304.8;
+                        double y = (hostPoint - origin).DotProduct(up) * 304.8;
+                        if (points.Count == 0 ||
+                            Math.Abs(points[points.Count - 1].Xmm - x) > 0.01 ||
+                            Math.Abs(points[points.Count - 1].Ymm - y) > 0.01)
+                            points.Add(new SectionPoint { Xmm = x, Ymm = y });
+                    }
+                }
+                if (points.Count >= 3)
+                {
+                    if (Math.Abs(points[0].Xmm - points[points.Count - 1].Xmm) < 0.01 &&
+                        Math.Abs(points[0].Ymm - points[points.Count - 1].Ymm) < 0.01)
+                        points.RemoveAt(points.Count - 1);
+                    if (points.Count >= 3)
+                        result.Add(new SectionContour { Points = points, IsHole = false });
+                }
+            }
+            return result;
         }
 
         private sealed class SourceElement
