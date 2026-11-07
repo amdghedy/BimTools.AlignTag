@@ -14,6 +14,7 @@ namespace AlignTool.Services
             public Point3() { }
             public Point3(double x, double y, double z) { X=x; Y=y; Z=z; }
             public static Point3 operator -(Point3 a, Point3 b) { return new Point3(a.X-b.X,a.Y-b.Y,a.Z-b.Z); }
+            public static Point3 operator +(Point3 a, Point3 b) { return new Point3(a.X+b.X,a.Y+b.Y,a.Z+b.Z); }
             public static Point3 operator *(Point3 a, double s) { return new Point3(a.X*s,a.Y*s,a.Z*s); }
             public double Dot(Point3 b) { return X*b.X+Y*b.Y+Z*b.Z; }
             public double Length() { return Math.Sqrt(Dot(this)); }
