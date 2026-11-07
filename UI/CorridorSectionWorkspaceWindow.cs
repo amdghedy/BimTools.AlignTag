@@ -205,9 +205,13 @@ namespace AlignTool.UI
                     " | Solids tested: " + _result.SolidsTested +
                     " | Boolean failures: " + _result.BooleanFailures +
                     " | Source: " + _result.SourceDescription;
-                _previewInfo.Text = _result.PlaneDescription +
-                    "  |  Slab thickness: " + _result.SlabThicknessMm.ToString("F1") + " mm";
-                DrawPreview();
+                if (_selectedStation != null) SelectStation(_selectedStation);
+                else
+                {
+                    _previewInfo.Text = _result.PlaneDescription +
+                        "  |  Slab thickness: " + _result.SlabThicknessMm.ToString("F1") + " mm";
+                    DrawPreview();
+                }
             }
             catch (Exception ex)
             {
