@@ -8,16 +8,16 @@ using Autodesk.Revit.DB;
 namespace AlignTool.Services
 {
     /// <summary>
-    /// Arranges MEP tags in active-view coordinates. Tag heads are stacked in stable
-    /// host-endpoint order; each leader elbow is placed at its own tag row to avoid
-    /// the shared vertical elbow rail used by the first implementation.
+    /// Drawing-wide MEP tag layout for composite views containing native and linked models.
+    /// Uses two perimeter annotation zones with as many vertical columns as required.
     /// </summary>
     public static class MepTagOrganizerService
     {
-        private const double DefaultGapMm = 8.0;
-        private const double MinimumHeadHeightMm = 12.0;
-        private const double MinimumHeadWidthMm = 25.0;
-        private const double DefaultSideOffsetMm = 50.0;
+        private const double GapMm = 8.0;
+        private const double SideOffsetMm = 35.0;
+        private const double MinimumTagWidthMm = 25.0;
+        private const double MinimumTagHeightMm = 12.0;
+        private const double CropMarginMm = 12.0;
 
         public sealed class TagPlan
         {
@@ -26,7 +26,8 @@ namespace AlignTool.Services
             public XYZ Elbow;
             public Reference LeaderReference;
             public string Side;
-            public double HostY;
+            public int Column;
+            public XYZ Anchor;
             public bool HasLeader;
         }
 
@@ -36,10 +37,14 @@ namespace AlignTool.Services
             public int Movable;
             public int Pinned;
             public int Leaderless;
+            public int LinkedHostTags;
+            public int NativeHostTags;
             public int Moved;
             public int Failed;
             public int ElbowsSet;
             public int ElbowFailures;
+            public int ColumnsLeft;
+            public int ColumnsRight;
             public IList<TagPlan> Plan = new List<TagPlan>();
         }
 
@@ -54,7 +59,8 @@ namespace AlignTool.Services
             (int)BuiltInCategory.OST_CableTray,
             (int)BuiltInCategory.OST_CableTrayFitting,
             (int)BuiltInCategory.OST_Conduit,
-            (int)BuiltInCategory.OST_ConduitFitting
+            (int)BuiltInCategory.OST_ConduitFitting,
+            (int)BuiltInCategory.OST_MechanicalEquipment
         };
 
         public static bool IsMepHost(Element host)
@@ -63,18 +69,23 @@ namespace AlignTool.Services
                 MepCategoryIds.Contains(host.Category.Id.IntegerValue);
         }
 
-        public static IList<IndependentTag> GetMepTagsInView(Document doc, View view)
+        /// <summary>Resolve a tag reference to its actual host, including a linked element.</summary>
+        public static Element ResolveReferencedHost(Document hostDocument, Reference reference,
+            out RevitLinkInstance linkInstance)
         {
-            var result = new List<IndependentTag>();
-            if (doc == null || view == null) return result;
+            linkInstance = null;
+            if (hostDocument == null || reference == null) return null;
 
-            foreach (IndependentTag tag in new FilteredElementCollector(doc, view.Id)
-                .OfClass(typeof(IndependentTag)).Cast<IndependentTag>())
+            Element direct = hostDocument.GetElement(reference.ElementId);
+            if (reference.LinkedElementId != ElementId.InvalidElementId)
             {
-                if (GetMepLeaderReference(tag, doc) != null)
-                    result.Add(tag);
+                linkInstance = direct as RevitLinkInstance;
+                if (linkInstance == null) return null;
+                Document linkedDocument = linkInstance.GetLinkDocument();
+                return linkedDocument == null ? null : linkedDocument.GetElement(reference.LinkedElementId);
             }
-            return result;
+
+            return direct;
         }
 
         public static Reference GetMepLeaderReference(IndependentTag tag, Document doc)
@@ -89,168 +100,214 @@ namespace AlignTool.Services
                     foreach (object item in refs)
                     {
                         Reference reference = item as Reference;
-                        if (reference != null && IsMepHost(doc.GetElement(reference.ElementId)))
+                        RevitLinkInstance link;
+                        if (reference != null && IsMepHost(ResolveReferencedHost(doc, reference, out link)))
                             return reference;
                     }
                 }
             }
             catch { }
 
+            // Legacy single-host fallback. Resolve the tag's reference rather than assuming
+            // that the referenced ElementId is always the physical MEP element.
             try
             {
-                Element host = doc.GetElement(AlignTool.Models.TagInfo.GetHostIdSafe(tag));
+                ElementId hostId = AlignTool.Models.TagInfo.GetHostIdSafe(tag);
+                Element host = doc.GetElement(hostId);
                 if (IsMepHost(host)) return new Reference(host);
             }
             catch { }
             return null;
         }
 
+        public static IList<IndependentTag> GetMepTagsInView(Document doc, View view)
+        {
+            var result = new List<IndependentTag>();
+            if (doc == null || view == null) return result;
+            foreach (IndependentTag tag in new FilteredElementCollector(doc, view.Id)
+                .OfClass(typeof(IndependentTag)).Cast<IndependentTag>())
+            {
+                if (GetMepLeaderReference(tag, doc) != null) result.Add(tag);
+            }
+            return result;
+        }
+
         public static ResultSummary BuildPlan(Document doc, View view, IList<IndependentTag> input)
         {
-            var summary = new ResultSummary();
-            if (doc == null || view == null || input == null) return summary;
+            var result = new ResultSummary();
+            if (doc == null || view == null || input == null) return result;
 
             XYZ right = view.RightDirection.Normalize();
             XYZ up = view.UpDirection.Normalize();
             XYZ normal = view.ViewDirection.Normalize();
             XYZ origin = view.Origin;
-            var records = new List<Record>();
+            var records = new List<TagRecord>();
 
-            foreach (IndependentTag tag in input.Where(x => x != null)
-                .GroupBy(x => x.Id.IntegerValue).Select(g => g.First()))
+            foreach (IndependentTag tag in input.Where(t => t != null)
+                .GroupBy(t => t.Id.IntegerValue).Select(g => g.First()))
             {
                 Reference reference = GetMepLeaderReference(tag, doc);
                 if (reference == null) continue;
 
-                summary.Eligible++;
-                if (tag.Pinned)
-                {
-                    summary.Pinned++;
-                    continue;
-                }
+                RevitLinkInstance link;
+                Element host = ResolveReferencedHost(doc, reference, out link);
+                if (!IsMepHost(host)) continue;
 
-                XYZ head = tag.TagHeadPosition;
-                XYZ anchor = GetLeaderEnd(tag, reference, doc, view);
-                if (anchor == null)
-                    anchor = GetHostCenter(doc.GetElement(reference.ElementId), view);
-                if (anchor == null) anchor = head;
+                result.Eligible++;
+                if (tag.Pinned) { result.Pinned++; continue; }
+
+                XYZ anchor = GetLeaderEnd(tag, reference);
+                if (anchor == null) anchor = GetHostCenter(host, link, view);
+                if (anchor == null) anchor = tag.TagHeadPosition;
 
                 bool hasLeader = false;
                 try { hasLeader = tag.HasLeader; } catch { }
-                if (!hasLeader) summary.Leaderless++;
+                if (!hasLeader) result.Leaderless++;
+                if (link == null) result.NativeHostTags++; else result.LinkedHostTags++;
 
-                double hx = (head - origin).DotProduct(right);
-                double hy = (head - origin).DotProduct(up);
-                double depth = (head - origin).DotProduct(normal);
-                double ax = (anchor - origin).DotProduct(right);
-                double ay = (anchor - origin).DotProduct(up);
-                double hostDepth = (anchor - origin).DotProduct(normal);
-                double width, height;
-                GetProjectedTagSize(tag, view, right, up, out width, out height);
+                double anchorX = (anchor - origin).DotProduct(right);
+                double anchorY = (anchor - origin).DotProduct(up);
+                double depth = (tag.TagHeadPosition - origin).DotProduct(normal);
+                double headX = (tag.TagHeadPosition - origin).DotProduct(right);
+                double headY = (tag.TagHeadPosition - origin).DotProduct(up);
+                double width, height, boxOffsetX, boxOffsetY;
+                GetProjectedTagSize(tag, view, right, up, headX, headY,
+                    out width, out height, out boxOffsetX, out boxOffsetY);
 
-                records.Add(new Record
+                records.Add(new TagRecord
                 {
                     Tag = tag,
                     Reference = reference,
-                    HeadX = hx,
-                    HeadY = hy,
-                    AnchorX = ax,
-                    AnchorY = ay,
+                    Anchor = anchor,
+                    AnchorX = anchorX,
+                    AnchorY = anchorY,
                     Depth = depth,
-                    HostDepth = hostDepth,
+                    CurrentHeadX = headX,
+                    CurrentHeadY = headY,
                     Width = width,
                     Height = height,
-                    HasLeader = hasLeader,
-                    Side = hx <= ax ? "Left" : "Right"
+                    BoxOffsetX = boxOffsetX,
+                    BoxOffsetY = boxOffsetY,
+                    HasLeader = hasLeader
                 });
             }
 
-            summary.Movable = records.Count;
-            if (records.Count == 0) return summary;
+            result.Movable = records.Count;
+            if (records.Count == 0) return result;
 
-            double gap = MmToFeet(DefaultGapMm);
-            double sideOffset = MmToFeet(DefaultSideOffsetMm);
-            double leftAnchor = records.Where(x => x.Side == "Left")
-                .Select(x => x.AnchorX).DefaultIfEmpty(records.Average(x => x.AnchorX)).Average();
-            double rightAnchor = records.Where(x => x.Side == "Right")
-                .Select(x => x.AnchorX).DefaultIfEmpty(records.Average(x => x.AnchorX)).Average();
+            double centreX = records.Select(r => r.AnchorX).OrderBy(x => x)
+                .ElementAt(records.Count / 2);
+            foreach (TagRecord record in records)
+                record.Side = record.AnchorX <= centreX ? "Left" : "Right";
 
-            double leftLane = records.Where(x => x.Side == "Left")
-                .Select(x => x.HeadX).DefaultIfEmpty(leftAnchor - sideOffset).Average();
-            double rightLane = records.Where(x => x.Side == "Right")
-                .Select(x => x.HeadX).DefaultIfEmpty(rightAnchor + sideOffset).Average();
+            double cropMinY, cropMaxY;
+            GetViewVerticalRange(view, origin, up, records, out cropMinY, out cropMaxY);
+            double availableHeight = Math.Max(MmToFeet(500), cropMaxY - cropMinY - 2 * MmToFeet(CropMarginMm));
+            double topY = cropMaxY - MmToFeet(CropMarginMm);
 
-            double leftWidth = records.Where(x => x.Side == "Left")
-                .Select(x => x.Width).DefaultIfEmpty(MmToFeet(MinimumHeadWidthMm)).Max();
-            double rightWidth = records.Where(x => x.Side == "Right")
-                .Select(x => x.Width).DefaultIfEmpty(MmToFeet(MinimumHeadWidthMm)).Max();
-            double centreX = records.Average(x => x.AnchorX);
-            double requiredHalfGap = (leftWidth + rightWidth) * 0.5 + gap;
+            double minAnchorX = records.Min(r => r.AnchorX);
+            double maxAnchorX = records.Max(r => r.AnchorX);
+            double leftBaseX = minAnchorX - MmToFeet(SideOffsetMm);
+            double rightBaseX = maxAnchorX + MmToFeet(SideOffsetMm);
 
-            if (leftLane >= rightLane)
+            result.ColumnsLeft = PackSide(records.Where(r => r.Side == "Left").ToList(),
+                "Left", leftBaseX, topY, availableHeight, right, up, normal, origin, result);
+            result.ColumnsRight = PackSide(records.Where(r => r.Side == "Right").ToList(),
+                "Right", rightBaseX, topY, availableHeight, right, up, normal, origin, result);
+
+            return result;
+        }
+
+        private static int PackSide(List<TagRecord> sideRecords, string side,
+            double baseX, double topY, double availableHeight,
+            XYZ right, XYZ up, XYZ normal, XYZ origin, ResultSummary result)
+        {
+            if (sideRecords.Count == 0) return 0;
+
+            // Preserve endpoint elevation order. Greedy column packing uses measured
+            // annotation extents so no two planned text boxes in one column overlap.
+            List<TagRecord> ordered = sideRecords.OrderByDescending(r => r.AnchorY)
+                .ThenBy(r => r.AnchorX)
+                .ThenBy(r => r.Tag.Id.IntegerValue).ToList();
+
+            double gap = MmToFeet(GapMm);
+            var columns = new List<List<TagRecord>>();
+            var columnHeights = new List<double>();
+            var columnWidths = new List<double>();
+
+            foreach (TagRecord record in ordered)
             {
-                leftLane = centreX - requiredHalfGap * 0.5;
-                rightLane = centreX + requiredHalfGap * 0.5;
-            }
-            else if (rightLane - leftLane < requiredHalfGap)
-            {
-                double laneCentre = (leftLane + rightLane) * 0.5;
-                leftLane = laneCentre - requiredHalfGap * 0.5;
-                rightLane = laneCentre + requiredHalfGap * 0.5;
-            }
-
-            foreach (string side in new[] { "Left", "Right" })
-            {
-                List<Record> lane = records.Where(x => x.Side == side)
-                    .OrderByDescending(x => x.AnchorY)
-                    .ThenBy(x => x.AnchorX)
-                    .ThenBy(x => x.Tag.Id.IntegerValue)
-                    .ToList();
-                if (lane.Count == 0) continue;
-
-                double totalHeight = lane.Sum(x => x.Height) + gap * Math.Max(0, lane.Count - 1);
-                double cursorY = lane.Average(x => x.AnchorY) + totalHeight * 0.5;
-                double laneX = side == "Left" ? leftLane : rightLane;
-
-                foreach (Record item in lane)
+                int target = columns.Count - 1;
+                double required = record.Height + (target >= 0 && columns[target].Count > 0 ? gap : 0);
+                if (target < 0 || columnHeights[target] + required > availableHeight)
                 {
-                    double targetY = cursorY - item.Height * 0.5;
-                    cursorY = targetY - item.Height * 0.5 - gap;
+                    columns.Add(new List<TagRecord>());
+                    columnHeights.Add(0);
+                    columnWidths.Add(0);
+                    target++;
+                    required = record.Height;
+                }
 
-                    XYZ newHead = origin + right * laneX + up * targetY + normal * item.Depth;
+                columns[target].Add(record);
+                columnHeights[target] += required;
+                columnWidths[target] = Math.Max(columnWidths[target], record.Width);
+            }
 
-                    // One elbow per leader: keep its Y on the unique tag row and its X
-                    // at the actual leader endpoint. Ordered endpoint/row pairs prevent
-                    // the avoidable crossings caused by a common elbow column.
-                    XYZ elbow = origin + right * item.AnchorX + up * targetY + normal * item.HostDepth;
+            double xCursor = baseX;
+            for (int c = 0; c < columns.Count; c++)
+            {
+                double colWidth = columnWidths[c];
+                double headCenterX = side == "Left"
+                    ? xCursor - colWidth * 0.5
+                    : xCursor + colWidth * 0.5;
 
-                    summary.Plan.Add(new TagPlan
+                double usedHeight = columnHeights[c];
+                double cursorY = topY - Math.Max(0, (availableHeight - usedHeight) * 0.5);
+
+                foreach (TagRecord record in columns[c])
+                {
+                    double boxCenterY = cursorY - record.Height * 0.5;
+                    cursorY -= record.Height + gap;
+
+                    double targetHeadX = headCenterX - record.BoxOffsetX;
+                    double targetHeadY = boxCenterY - record.BoxOffsetY;
+                    XYZ head = origin + right * targetHeadX + up * targetHeadY + normal * record.Depth;
+
+                    // Vertical first, then horizontal to the head. Keeping host elevation
+                    // order inside each column reduces leader crossings. Each row gets an
+                    // individual elbow rather than a shared elbow rail.
+                    XYZ elbow = origin + right * record.AnchorX + up * targetHeadY + normal *
+                        ((record.Anchor - origin).DotProduct(normal));
+
+                    result.Plan.Add(new TagPlan
                     {
-                        Tag = item.Tag,
-                        Head = newHead,
+                        Tag = record.Tag,
+                        Head = head,
                         Elbow = elbow,
-                        LeaderReference = item.Reference,
+                        LeaderReference = record.Reference,
                         Side = side,
-                        HostY = item.AnchorY,
-                        HasLeader = item.HasLeader
+                        Column = c + 1,
+                        Anchor = record.Anchor,
+                        HasLeader = record.HasLeader
                     });
                 }
+
+                xCursor += (side == "Left" ? -1 : 1) * (colWidth + gap);
             }
 
-            return summary;
+            return columns.Count;
         }
 
         public static ResultSummary Apply(Document doc, ResultSummary summary)
         {
             if (doc == null || summary == null || summary.Plan == null) return summary;
 
-            using (Transaction tx = new Transaction(doc, "BIM TOOLS - MEP Tag Organizer"))
+            using (Transaction tx = new Transaction(doc, "BIM TOOLS - Composite MEP Tag Layout"))
             {
                 tx.Start();
                 foreach (TagPlan item in summary.Plan)
                 {
                     if (item == null || item.Tag == null || item.Tag.Pinned) continue;
-
                     using (SubTransaction sub = new SubTransaction(doc))
                     {
                         try
@@ -258,7 +315,6 @@ namespace AlignTool.Services
                             sub.Start();
                             item.Tag.TagHeadPosition = item.Head;
                             summary.Moved++;
-
                             if (item.HasLeader)
                             {
                                 if (TrySetLeaderElbow(item.Tag, item.LeaderReference, item.Elbow))
@@ -266,7 +322,6 @@ namespace AlignTool.Services
                                 else
                                     summary.ElbowFailures++;
                             }
-
                             sub.Commit();
                         }
                         catch
@@ -278,86 +333,109 @@ namespace AlignTool.Services
                 }
                 tx.Commit();
             }
-
             return summary;
         }
 
         public static string Describe(ResultSummary r)
         {
-            if (r == null) return "No MEP tag plan was created.";
-            return "Eligible MEP tags: " + r.Eligible +
+            if (r == null) return "No MEP layout plan was created.";
+            return "COMPOSITE MEP DRAWING LAYOUT PREVIEW" +
+                "\nEligible MEP tags: " + r.Eligible +
                 "\nMovable tags: " + r.Movable +
+                "\nNative-model hosts: " + r.NativeHostTags +
+                "\nLinked-model hosts: " + r.LinkedHostTags +
                 "\nPinned (skipped): " + r.Pinned +
                 "\nLeaderless: " + r.Leaderless +
-                "\nPlanned head moves: " + (r.Plan == null ? 0 : r.Plan.Count) +
-                "\n\nTag heads are stacked by leader endpoint elevation with measured tag-box spacing. Each leader elbow is assigned to its own row. The routing minimizes avoidable crossings for ordered endpoints; inspect cases with coincident endpoints, multi-reference tags or constrained leaders.";
+                "\nLeft annotation columns: " + r.ColumnsLeft +
+                "\nRight annotation columns: " + r.ColumnsRight +
+                "\nPlanned tag moves: " + (r.Plan == null ? 0 : r.Plan.Count) +
+                "\n\nTags are packed into measured, non-overlapping vertical columns on both sides of the composite view. Host elevation order is preserved within each column. Leaders are given individual orthogonal elbows where the Revit API allows it. Check the preview and review the final drawing, especially at column transitions.";
         }
 
         private static void GetProjectedTagSize(IndependentTag tag, View view,
-            XYZ right, XYZ up, out double width, out double height)
+            XYZ right, XYZ up, double headX, double headY,
+            out double width, out double height, out double offsetX, out double offsetY)
         {
-            width = MmToFeet(MinimumHeadWidthMm);
-            height = MmToFeet(MinimumHeadHeightMm);
-
+            width = MmToFeet(MinimumTagWidthMm);
+            height = MmToFeet(MinimumTagHeightMm);
+            offsetX = 0;
+            offsetY = 0;
             try
             {
                 BoundingBoxXYZ box = tag.get_BoundingBox(view);
                 if (box == null) return;
-
-                Transform transform = box.Transform;
-                if (transform == null) transform = Transform.Identity;
-
-                double minX = double.MaxValue;
-                double maxX = double.MinValue;
-                double minY = double.MaxValue;
-                double maxY = double.MinValue;
-
+                Transform transform = box.Transform ?? Transform.Identity;
+                double minX = double.MaxValue, maxX = double.MinValue;
+                double minY = double.MaxValue, maxY = double.MinValue;
                 for (int ix = 0; ix < 2; ix++)
                 for (int iy = 0; iy < 2; iy++)
                 for (int iz = 0; iz < 2; iz++)
                 {
-                    XYZ local = new XYZ(
-                        ix == 0 ? box.Min.X : box.Max.X,
+                    XYZ local = new XYZ(ix == 0 ? box.Min.X : box.Max.X,
                         iy == 0 ? box.Min.Y : box.Max.Y,
                         iz == 0 ? box.Min.Z : box.Max.Z);
                     XYZ world = transform.OfPoint(local);
                     double x = world.DotProduct(right);
                     double y = world.DotProduct(up);
-                    minX = Math.Min(minX, x);
-                    maxX = Math.Max(maxX, x);
-                    minY = Math.Min(minY, y);
-                    maxY = Math.Max(maxY, y);
+                    minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                    minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
                 }
-
                 if (maxX - minX > 1e-5) width = Math.Max(width, maxX - minX);
                 if (maxY - minY > 1e-5) height = Math.Max(height, maxY - minY);
+                offsetX = (minX + maxX) * 0.5 - headX;
+                offsetY = (minY + maxY) * 0.5 - headY;
             }
             catch { }
         }
 
-        private static XYZ GetLeaderEnd(IndependentTag tag, Reference reference, Document doc, View view)
+        private static void GetViewVerticalRange(View view, XYZ origin, XYZ up,
+            IList<TagRecord> records, out double minY, out double maxY)
+        {
+            minY = records.Min(r => r.AnchorY);
+            maxY = records.Max(r => r.AnchorY);
+            try
+            {
+                BoundingBoxXYZ crop = view.CropBox;
+                if (crop == null) return;
+                Transform transform = crop.Transform ?? Transform.Identity;
+                double cropMin = double.MaxValue, cropMax = double.MinValue;
+                for (int ix = 0; ix < 2; ix++)
+                for (int iy = 0; iy < 2; iy++)
+                for (int iz = 0; iz < 2; iz++)
+                {
+                    XYZ local = new XYZ(ix == 0 ? crop.Min.X : crop.Max.X,
+                        iy == 0 ? crop.Min.Y : crop.Max.Y,
+                        iz == 0 ? crop.Min.Z : crop.Max.Z);
+                    double y = (transform.OfPoint(local) - origin).DotProduct(up);
+                    cropMin = Math.Min(cropMin, y);
+                    cropMax = Math.Max(cropMax, y);
+                }
+                if (cropMax - cropMin > MmToFeet(500))
+                {
+                    minY = cropMin;
+                    maxY = cropMax;
+                }
+            }
+            catch { }
+        }
+
+        private static XYZ GetLeaderEnd(IndependentTag tag, Reference reference)
         {
             try
             {
                 MethodInfo method = tag.GetType().GetMethod("GetLeaderEnd", new[] { typeof(Reference) });
-                if (method != null)
-                {
-                    XYZ point = method.Invoke(tag, new object[] { reference }) as XYZ;
-                    if (point != null) return point;
-                }
+                if (method != null) return method.Invoke(tag, new object[] { reference }) as XYZ;
             }
             catch { }
-
-            try { return AlignTool.Models.TagInfo.GetLeaderEndSafe(tag, doc, view, out _); }
-            catch { return null; }
+            return null;
         }
 
         private static bool TrySetLeaderElbow(IndependentTag tag, Reference reference, XYZ point)
         {
-            if (tag == null || reference == null || point == null) return false;
             try
             {
-                MethodInfo method = tag.GetType().GetMethod("SetLeaderElbow", new[] { typeof(Reference), typeof(XYZ) });
+                MethodInfo method = tag.GetType().GetMethod("SetLeaderElbow",
+                    new[] { typeof(Reference), typeof(XYZ) });
                 if (method == null) return false;
                 method.Invoke(tag, new object[] { reference, point });
                 return true;
@@ -365,34 +443,35 @@ namespace AlignTool.Services
             catch { return false; }
         }
 
-        private static XYZ GetHostCenter(Element host, View view)
+        private static XYZ GetHostCenter(Element host, RevitLinkInstance link, View view)
         {
             if (host == null) return null;
             try
             {
-                if (host.Location is LocationPoint lp) return lp.Point;
-                if (host.Location is LocationCurve lc) return lc.Curve.Evaluate(0.5, true);
-                BoundingBoxXYZ box = host.get_BoundingBox(view);
-                if (box != null) return box.Transform.OfPoint((box.Min + box.Max) * 0.5);
+                XYZ point = null;
+                if (host.Location is LocationPoint lp) point = lp.Point;
+                else if (host.Location is LocationCurve lc) point = lc.Curve.Evaluate(0.5, true);
+                else
+                {
+                    BoundingBoxXYZ box = host.get_BoundingBox(null);
+                    if (box != null) point = box.Transform.OfPoint((box.Min + box.Max) * 0.5);
+                }
+                if (point != null && link != null) point = link.GetTotalTransform().OfPoint(point);
+                return point;
             }
-            catch { }
-            return null;
+            catch { return null; }
         }
 
         private static double MmToFeet(double mm) { return mm / 304.8; }
 
-        private sealed class Record
+        private sealed class TagRecord
         {
             public IndependentTag Tag;
             public Reference Reference;
-            public double HeadX;
-            public double HeadY;
-            public double AnchorX;
-            public double AnchorY;
-            public double Depth;
-            public double HostDepth;
-            public double Width;
-            public double Height;
+            public XYZ Anchor;
+            public double AnchorX, AnchorY, Depth;
+            public double CurrentHeadX, CurrentHeadY;
+            public double Width, Height, BoxOffsetX, BoxOffsetY;
             public bool HasLeader;
             public string Side;
         }
