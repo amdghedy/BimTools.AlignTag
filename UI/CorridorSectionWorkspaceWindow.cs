@@ -148,7 +148,7 @@ namespace AlignTool.UI
             Generate();
         }
 
-        private static void AddControl(Panel panel, string label, TextBox input)
+        private static void AddControl(System.Windows.Controls.Panel panel, string label, TextBox input)
         {
             var group = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 4, 4) };
             group.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
