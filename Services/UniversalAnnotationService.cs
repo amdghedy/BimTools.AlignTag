@@ -177,8 +177,8 @@ namespace AlignTool.Services
                             if (property == null || !property.CanWrite)
                                 throw new InvalidOperationException("Tag head position is not writable.");
                             property.SetValue(move.Element, move.Destination, null);
-                            sub.Commit();
-                            moved++;
+                            if (sub.Commit() == TransactionStatus.Committed)
+                                moved++;
                         }
                         catch
                         {
