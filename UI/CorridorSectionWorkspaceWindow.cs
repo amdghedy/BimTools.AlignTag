@@ -93,7 +93,7 @@ namespace AlignTool.UI
             DockPanel.SetDock(footer, Dock.Bottom);
             root.Children.Add(footer);
 
-            var body = new Grid();
+            var body = new System.Windows.Controls.Grid();
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(245) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(430) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -113,7 +113,7 @@ namespace AlignTool.UI
             _stations.Columns.Add(Column("Elements", "ElementCount", 72));
             _stations.SelectionChanged += (s, e) => SelectStation(_stations.SelectedItem as CorridorSectionWorkspaceService.StationResult);
             stationPanel.Children.Add(_stations);
-            Grid.SetColumn(stationPanel, 0);
+            System.Windows.Controls.Grid.SetColumn(stationPanel, 0);
             body.Children.Add(stationPanel);
 
             var itemPanel = new DockPanel { Margin = new Thickness(0, 0, 10, 0) };
@@ -306,7 +306,7 @@ namespace AlignTool.UI
                     {
                         double x = (point - stationOrigin).DotProduct(_result.Right) * 304.8;
                         double y = (point - stationOrigin).DotProduct(_result.Up) * 304.8;
-                        return new Point(offsetX + (x - minX) * scale,
+                        return new System.Windows.Point(offsetX + (x - minX) * scale,
                             offsetY + (maxY - y) * scale);
                     }))
                 };
