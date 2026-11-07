@@ -57,6 +57,7 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
@@ -79,6 +80,9 @@
     <Compile Include="Services\Csd3DCoordinationEngine.cs" />
     <Compile Include="Services\Revit3DCoordinationExtractionService.cs" />
     <Compile Include="Services\CorridorSectionWorkspaceService.cs" />
+    <Compile Include="Services\ClearanceProfileService.cs" />
+    <Compile Include="Commands\ClearanceProfileEditorCommand.cs" />
+    <Compile Include="UI\ClearanceProfileWindow.cs" />
     <Compile Include="Commands\CorridorSectionWorkspaceCommand.cs" />
     <Compile Include="UI\CorridorSectionWorkspaceWindow.cs" />
     <Compile Include="Commands\Revit3DCoordinationCommand.cs" />
