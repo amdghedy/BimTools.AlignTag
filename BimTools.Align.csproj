@@ -74,6 +74,9 @@
     <Compile Include="Commands\MepTagOrganizerCommand.cs" />
     <Compile Include="Services\MepTagOrganizerService.cs" />
     <Compile Include="Services\KnowledgeBasedCsdEngine.cs" />
+    <Compile Include="Services\RevitCsdExtractionService.cs" />
+    <Compile Include="Commands\IntelligentCsdOptimizerCommand.cs" />
+    <Compile Include="UI\CsdOptimizerWindow.cs" />
     <Compile Include="Commands\StraightenLeadersCommand.cs" />
     <Compile Include="Commands\MatchLeaderLengthsCommand.cs" />
     <Compile Include="Commands\AlignTagOrientationCommand.cs" />
