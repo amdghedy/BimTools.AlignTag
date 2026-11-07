@@ -16,8 +16,9 @@ The ALIGN ribbon now includes **CSD Optimize**. The command is read-only and tar
 10. Retrieves separately hosted duct/pipe insulation and duct lining through Revit 2020 InsulationLiningBase APIs and sections their solids independently.
 11. Uses transformed linked-element bounding-box intersection against the active crop box rather than filtering links by element centre only.
 12. Repositions measured section contours to candidate placement centres and checks candidate pairs for true-profile 2D overlap, with internal void loops excluded from the filled material region.
-13. Reports successful solid sections, geometry failures and insulation/lining objects; the candidate table displays measured-profile overlap checks.
-14. Records engineer grades in the current session, reports NDCG@5, and exports the selected candidate to CSV.
+13. Checks translated measured-profile bounds against the available section boundary and reports profile overflow separately from pairwise overlaps.
+14. Reports successful solid sections, geometry failures and insulation/lining objects; the candidate table displays measured-profile overlap and boundary checks.
+15. Records engineer grades in the current session, reports NDCG@5, and exports the selected candidate to CSV.
 
 ## Safety boundary
 
