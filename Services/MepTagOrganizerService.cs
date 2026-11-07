@@ -66,7 +66,7 @@ namespace AlignTool.Services
             foreach (IndependentTag tag in new FilteredElementCollector(doc, view.Id)
                 .OfClass(typeof(IndependentTag)).Cast<IndependentTag>())
             {
-                if (GetMepLeaderReference(tag, doc) != null || IsMepHost(doc.GetElement(Models.TagInfo.GetHostIdSafe(tag))))
+                if (GetMepLeaderReference(tag, doc) != null || IsMepHost(doc.GetElement(AlignTool.Models.TagInfo.GetHostIdSafe(tag))))
                     result.Add(tag);
             }
             return result;
@@ -92,7 +92,7 @@ namespace AlignTool.Services
             catch { }
             try
             {
-                Element host = doc.GetElement(Models.TagInfo.GetHostIdSafe(tag));
+                Element host = doc.GetElement(AlignTool.Models.TagInfo.GetHostIdSafe(tag));
                 if (IsMepHost(host)) return new Reference(host);
             }
             catch { }
@@ -161,9 +161,8 @@ namespace AlignTool.Services
             double maxAnchorX = records.Max(x => x.AnchorX);
             double minHeadX = records.Min(x => x.HeadX);
             double maxHeadX = records.Max(x => x.HeadX);
-            double margin = MmToFeet(150);
-            double leftLane = Math.Min(minHeadX, minAnchorX) - margin;
-            double rightLane = Math.Max(maxHeadX, maxAnchorX) + margin;
+            double leftLane = records.Where(x => x.Side == "Left").Select(x => x.HeadX).DefaultIfEmpty(minAnchorX - MmToFeet(50)).Average();
+            double rightLane = records.Where(x => x.Side == "Right").Select(x => x.HeadX).DefaultIfEmpty(maxAnchorX + MmToFeet(50)).Average();
             double gap = MmToFeet(DefaultGapMm);
             double maxHeight = records.Max(x => x.Height);
             double rowSpacing = Math.Max(MmToFeet(25), maxHeight + gap);
@@ -246,7 +245,7 @@ namespace AlignTool.Services
                 if (method != null) return method.Invoke(tag, new object[] { reference }) as XYZ;
             }
             catch { }
-            try { return Models.TagInfo.GetLeaderEndSafe(tag, doc, view, out _); }
+            try { return AlignTool.Models.TagInfo.GetLeaderEndSafe(tag, doc, view, out _); }
             catch { return null; }
         }
 
