@@ -301,7 +301,7 @@ namespace AlignTool.UI
                 {
                     Stroke = contour.IsHole ? Brushes.DarkOrange : Brushes.SteelBlue,
                     StrokeThickness = 1.6,
-                    Fill = contour.IsHole ? Brushes.Transparent : new SolidColorBrush(Color.FromArgb(35, 70, 130, 180)),
+                    Fill = contour.IsHole ? Brushes.Transparent : new SolidColorBrush(System.Windows.Media.Color.FromArgb(35, 70, 130, 180)),
                     Points = new PointCollection(contour.PointsHost.Select(point =>
                     {
                         double x = (point - stationOrigin).DotProduct(_result.Right) * 304.8;
