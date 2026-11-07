@@ -10,20 +10,23 @@ Professional IndependentTag alignment, arrange, and leader tools under the **BIM
 
 ## Download built DLL (CI artifact)
 
-Latest successful **Release | x64** build:
+Latest verified **Release | x64** build:
 
 | Item | Link |
 |------|------|
-| **Actions run** | [Build #14 – success](https://github.com/amdghedy/BimTools.AlignTag/actions/runs/42070372275) |
-| **Artifact (ZIP)** | [BimTools.Align-Release](https://github.com/amdghedy/BimTools.AlignTag/actions/runs/42070372275#artifacts) |
-| **Direct artifact API** | [Download ZIP](https://github.com/amdghedy/BimTools.AlignTag/actions/artifacts/13436590629/zip) |
+| **Actions run** | [Build #15 – success](https://github.com/amdghedy/BimTools.AlignTag/actions/runs/42070975304) |
+| **Artifact (ZIP)** | [BimTools.Align-Release](https://github.com/amdghedy/BimTools.AlignTag/actions/runs/42070975304#artifacts) |
+| **Direct artifact API** | [Download ZIP](https://github.com/amdghedy/BimTools.AlignTag/actions/artifacts/13436626443/zip) |
 
 > You must be logged into GitHub to download the artifact.  
 > Open the run page → **Artifacts** → **BimTools.Align-Release**.
 
+The CI workflow validates that the release DLL and Revit add-in manifest both exist and are non-empty before publishing the artifact.
+
 Artifact contents:
 - `BimTools.Align.dll`
 - `BimTools.Align.addin`
+- `Resources/**` (when resource files are present)
 
 ---
 
@@ -32,8 +35,6 @@ Artifact contents:
 - Autodesk Revit **2020** (x64)
 - .NET Framework 4.7.2 (build only)
 - Visual Studio 2019/2022 (optional – CI builds on every push)
-
----
 
 ## Install
 
@@ -63,8 +64,8 @@ Revit API is restored from **NuGet** (no local Revit install required to compile
 
 | Package | Version |
 |---------|---------|
-| `Nice3point.Revit.Api.RevitAPI` | 2020.2.90 |
-| `Nice3point.Revit.Api.RevitAPIUI` | 2020.2.90 |
+| `Nice3point.Revit.Api.RevitAPI` | `2020.2.90` |
+| `Nice3point.Revit.Api.RevitAPIUI` | `2020.2.90` |
 
 ```bat
 git clone https://github.com/amdghedy/BimTools.AlignTag.git
@@ -75,7 +76,7 @@ msbuild BimTools.Align.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 
 Output: `bin\x64\Release\BimTools.Align.dll`
 
-CI workflow: `.github/workflows/dotnet-desktop.yml` (runs on every push to `main`).
+CI workflow: `.github/workflows/dotnet-desktop.yml` (runs on pushes and pull requests targeting `main`).
 
 ---
 
