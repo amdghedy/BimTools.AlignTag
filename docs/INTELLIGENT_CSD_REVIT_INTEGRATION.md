@@ -4,7 +4,7 @@
 
 The ALIGN ribbon now includes **CSD Optimize**. The command is read-only and targets Revit 2020 / .NET Framework 4.7.2.
 
-1. Reads native MEP elements in the active view, or the current selection when it contains supported MEP elements.
+1. Reads native MEP elements in the active view or selection and traverses loaded Revit links visible in the active view. A selected RevitLinkInstance can also be analysed.
 2. Supports duct and flex duct, duct fittings/accessories, pipe and flex pipe, pipe fittings/accessories, cable trays/fittings, conduits/fittings, and mechanical/electrical equipment.
 3. Reads rectangular, oval and round connector envelopes where available. Round connector diameter is converted to a square section envelope.
 4. Uses built-in width/height/diameter parameters as a fallback when connector dimensions are unavailable.
@@ -16,11 +16,11 @@ The ALIGN ribbon now includes **CSD Optimize**. The command is read-only and tar
 
 This increment does **not** move, rotate, resize, disconnect, reconnect, or recreate any Revit MEP element. The window is an analysis/review surface only. Exported positions are solver coordinates in millimetres, not a command to modify model geometry.
 
-The initial extraction adapter reads native host-document elements only. It does not yet traverse linked RVT documents. Connector envelope dimensions are used as packing rectangles; complex fitting geometry, insulation, lining, slope, access zones, supports, hanger clearances, fire-stopping and maintenance zones are not yet fully modelled.
+The extraction adapter traverses loaded RevitLinkInstance documents, applies each link's total transform to element centres and connector coordinate frames, and prefixes element identifiers with the link instance identity. When the active view crop is active, linked element centres are filtered against the transformed crop-box bounds. Unloadable links are skipped. Connector envelope dimensions are used as packing rectangles; complex fitting geometry, insulation, lining, slope, access zones, supports, hanger clearances, fire-stopping and maintenance zones are not yet fully modelled.
 
 ## Engineering limitations to resolve before construction use
 
-- Build a linked-model extraction adapter that applies each RevitLinkInstance transform and records source model identity.
+- Improve linked-model extraction with robust visibility/crop-shape filtering, unloaded-link diagnostics, source document version tracking and linked-model performance tests.
 - Build a true section-plane projection and route-aware grouping for long ducts/pipes/trays, not just connector-envelope packing.
 - Add system-specific rules, project profiles, code/standard checks, insulation and fitting envelopes.
 - Add multi-section corridor continuity and utility crossover handling.
