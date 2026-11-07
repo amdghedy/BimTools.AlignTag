@@ -60,6 +60,9 @@ namespace AlignTool.Services
             public string SecondModel { get; set; }
             public double IntersectionVolumeMm3 { get; set; }
             public int SolidPairsTested { get; set; }
+            public string FirstGeometryKind { get; set; }
+            public string SecondGeometryKind { get; set; }
+            public bool IsInsulationOrLiningRelated { get; set; }
             public string GeometryBasis { get; set; }
         }
 
@@ -178,6 +181,7 @@ namespace AlignTool.Services
                     AddAttachedGeometry(element, source.ToHost, record, result, true);
                     AddAttachedGeometry(element, source.ToHost, record, result, false);
                     ReadBounds(element, source.ToHost, record);
+                    ExpandBoundsFromSolids(record);
                     ReadSystemName(element, out string systemName);
                     record.SystemName = systemName;
                     if (record.Solids.Count > 0) result.ElementsWithSolids++;
@@ -358,9 +362,11 @@ namespace AlignTool.Services
                 result.BroadPhasePairs++;
                 double maxIntersectionVolume = 0;
                 int tested = 0;
-                foreach (Solid solidA in a.Solids)
-                foreach (Solid solidB in b.Solids)
+                string firstKind = "", secondKind = "";
+                for (int ai = 0; ai < a.Solids.Count; ai++)
+                for (int bi = 0; bi < b.Solids.Count; bi++)
                 {
+                    Solid solidA = a.Solids[ai], solidB = b.Solids[bi];
                     if (!SolidBoundsOverlap(solidA, solidB)) continue;
                     tested++;
                     result.SolidPairsTested++;
@@ -368,8 +374,12 @@ namespace AlignTool.Services
                     {
                         Solid intersection = BooleanOperationsUtils.ExecuteBooleanOperation(
                             solidA, solidB, BooleanOperationsType.Intersect);
-                        if (intersection != null && intersection.Faces.Size > 0 && intersection.Volume > 1e-12)
-                            maxIntersectionVolume = Math.Max(maxIntersectionVolume, intersection.Volume);
+                        if (intersection != null && intersection.Faces.Size > 0 && intersection.Volume > maxIntersectionVolume)
+                        {
+                            maxIntersectionVolume = intersection.Volume;
+                            firstKind = a.GeometryKinds[ai];
+                            secondKind = b.GeometryKinds[bi];
+                        }
                     }
                     catch { result.BooleanFailures++; }
                 }
@@ -380,7 +390,8 @@ namespace AlignTool.Services
                         FirstName = a.Name, SecondName = b.Name,
                         FirstModel = a.ModelName, SecondModel = b.ModelName,
                         IntersectionVolumeMm3 = maxIntersectionVolume * CubicFootToCubicMillimetres,
-                        SolidPairsTested = tested,
+                        SolidPairsTested = tested, FirstGeometryKind = firstKind, SecondGeometryKind = secondKind,
+                        IsInsulationOrLiningRelated = firstKind != "Element" || secondKind != "Element",
                         GeometryBasis = "Native Revit solid Boolean intersection; element, attached insulation and lining solids included."
                     });
             }
@@ -420,6 +431,30 @@ namespace AlignTool.Services
                 max = new XYZ(Math.Max(max.X,p.X),Math.Max(max.Y,p.Y),Math.Max(max.Z,p.Z));
             }
             record.BoundsMin = min; record.BoundsMax = max;
+        }
+
+        private static void ExpandBoundsFromSolids(ElementRecord record)
+        {
+            foreach (Solid solid in record.Solids)
+            {
+                try
+                {
+                    BoundingBoxXYZ box = solid.GetBoundingBox();
+                    if (box == null) continue;
+                    foreach (XYZ p in BoxCorners(box))
+                    {
+                        if (record.BoundsMin == null)
+                        {
+                            record.BoundsMin = p; record.BoundsMax = p; continue;
+                        }
+                        record.BoundsMin = new XYZ(Math.Min(record.BoundsMin.X,p.X),
+                            Math.Min(record.BoundsMin.Y,p.Y),Math.Min(record.BoundsMin.Z,p.Z));
+                        record.BoundsMax = new XYZ(Math.Max(record.BoundsMax.X,p.X),
+                            Math.Max(record.BoundsMax.Y,p.Y),Math.Max(record.BoundsMax.Z,p.Z));
+                    }
+                }
+                catch { }
+            }
         }
 
         private static XYZ[] BoxCorners(BoundingBoxXYZ box)
