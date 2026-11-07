@@ -28,7 +28,7 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("DistV", "Dist V", "AlignTool.Commands.DistributeVerticalCommand", "Distribute evenly vertically.", null, "dist_v"),
                     RibbonHelper.CreatePushButtonData("AlignToLine", "To Line", "AlignTool.Commands.AlignToLineCommand", "Project tag heads onto a picked line/grid.", null, "align_line"));
 
-                RibbonPanel pArr = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ARRANGE");
+                RibbonPanel pArr = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
                 RibbonHelper.AddStackedTriple(pArr,
                     RibbonHelper.CreatePushButtonData("PreventLeaderCrossing", "Stack", "AlignTool.Commands.PreventLeaderCrossingCommand", "Stack by host order, remove crossings.", null, "stack"),
                     RibbonHelper.CreatePushButtonData("ArrangeLeft", "Left Col", "AlignTool.Commands.ArrangeLeftCommand", "Stack selected/all tags on left of view.", null, "arrange_left"),
@@ -42,7 +42,7 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("MatchLeaderLengths", "Match Len", "AlignTool.Commands.MatchLeaderLengthsCommand", "Equal leader lengths.", null, "match_len"),
                     RibbonHelper.CreatePushButtonData("MinimizeLeaders", "Minimize", "AlignTool.Commands.MinimizeLeaderCommand", "Shorten leaders ~150 mm.", null, "minimize"));
 
-                RibbonPanel pTag = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "TAG TOOLS");
+                RibbonPanel pTag = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
                 RibbonHelper.AddStackedTriple(pTag,
                     RibbonHelper.CreatePushButtonData("AlignTagsHorizontally", "Horiz", "AlignTool.Commands.AlignHorizontallyCommand", "Same Y (first = master).", null, "align_h"),
                     RibbonHelper.CreatePushButtonData("AlignTagsVertically", "Vert", "AlignTool.Commands.AlignVerticallyCommand", "Same X (first = master).", null, "align_v"),
@@ -55,9 +55,9 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("PinTags", "Pin", "AlignTool.Commands.PinTagsCommand", "Pin selected tags.", null, "pin"),
                     RibbonHelper.CreatePushButtonData("UnpinTags", "Unpin", "AlignTool.Commands.UnpinTagsCommand", "Unpin selected tags.", null, "unpin"),
                     RibbonHelper.CreatePushButtonData("AlignToolSettings", "Settings", "AlignTool.Commands.ShowSettingsCommand", "Settings.", null, "settings"));
-                RibbonHelper.AddPushButton(pTag, "AlignToolAbout", "About", "AlignTool.Commands.AboutCommand", "About.", null, "about");
 
-                RibbonPanel pUniversal = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "UNIVERSAL ALIGN");
+
+                RibbonPanel pUniversal = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
                 RibbonHelper.AddStackedTriple(pUniversal,
                     RibbonHelper.CreatePushButtonData("UniversalAlignLeft", "Left", "AlignTool.Commands.UniversalAlignLeftCommand", "Align any supported tag head to the left in the active view.", null, "align_left"),
                     RibbonHelper.CreatePushButtonData("UniversalAlignCenter", "Center", "AlignTool.Commands.UniversalAlignCenterCommand", "Center supported tag heads in the active view.", null, "align_center"),
@@ -66,18 +66,22 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("UniversalAlignTop", "Top", "AlignTool.Commands.UniversalAlignTopCommand", "Align supported tag heads to the top in the active view.", null, "align_top"),
                     RibbonHelper.CreatePushButtonData("UniversalAlignMiddle", "Middle", "AlignTool.Commands.UniversalAlignMiddleCommand", "Align supported tag heads to the vertical middle.", null, "align_middle"),
                     RibbonHelper.CreatePushButtonData("UniversalAlignBottom", "Bottom", "AlignTool.Commands.UniversalAlignBottomCommand", "Align supported tag heads to the bottom.", null, "align_bottom"));
-                RibbonHelper.AddPushButton(pUniversal, "UniversalDistH", "Dist H", "AlignTool.Commands.UniversalDistributeHorizontalCommand", "Evenly distribute supported tags along the view horizontal axis.", null, "dist_h");
-                RibbonHelper.AddPushButton(pUniversal, "UniversalDistV", "Dist V", "AlignTool.Commands.UniversalDistributeVerticalCommand", "Evenly distribute supported tags along the view vertical axis.", null, "dist_v");
-                RibbonHelper.AddPushButton(pUniversal, "UniversalSelectAll", "All View", "AlignTool.Commands.UniversalSelectAllTagsInViewCommand", "Select every supported annotation tag visible in the active view.", null, "select_all");
-                RibbonHelper.AddPushButton(pUniversal, "UniversalMatchH", "Match H", "AlignTool.Commands.UniversalMatchHorizontalToFirstCommand", "Match selected tags to the first selected tag on the same view-horizontal line.", null, "align_h");
-                RibbonHelper.AddPushButton(pUniversal, "UniversalMatchV", "Match V", "AlignTool.Commands.UniversalMatchVerticalToFirstCommand", "Match selected tags to the first selected tag on the same view-vertical line.", null, "align_v");
+                RibbonHelper.AddStackedTriple(pUniversal,
+                    RibbonHelper.CreatePushButtonData("AlignToolAbout", "About", "AlignTool.Commands.AboutCommand", "About BIM TOOLS ALIGN.", null, "about"),
+                    RibbonHelper.CreatePushButtonData("UniversalDistH", "Dist H", "AlignTool.Commands.UniversalDistributeHorizontalCommand", "Evenly distribute supported tags along the view horizontal axis.", null, "dist_h"),
+                    RibbonHelper.CreatePushButtonData("UniversalDistV", "Dist V", "AlignTool.Commands.UniversalDistributeVerticalCommand", "Evenly distribute supported tags along the view vertical axis.", null, "dist_v"));
+                RibbonHelper.AddStackedTriple(pUniversal,
+                    RibbonHelper.CreatePushButtonData("UniversalSelectAll", "All View", "AlignTool.Commands.UniversalSelectAllTagsInViewCommand", "Select every supported annotation tag visible in the active view.", null, "select_all"),
+                    RibbonHelper.CreatePushButtonData("UniversalMatchH", "Match H", "AlignTool.Commands.UniversalMatchHorizontalToFirstCommand", "Match selected tags to the first selected tag on the same view-horizontal line.", null, "align_h"),
+                    RibbonHelper.CreatePushButtonData("UniversalMatchV", "Match V", "AlignTool.Commands.UniversalMatchVerticalToFirstCommand", "Match selected tags to the first selected tag on the same view-vertical line.", null, "align_v"));
 
-                RibbonPanel pSelect = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "TAG SELECTION");
-                RibbonHelper.AddPushButton(pSelect, "UniversalSelectPinned", "Pinned", "AlignTool.Commands.UniversalSelectPinnedTagsCommand", "Select supported pinned annotation tags in the active view.", null, "pin");
-                RibbonHelper.AddPushButton(pSelect, "UniversalSelectUnpinned", "Unpinned", "AlignTool.Commands.UniversalSelectUnpinnedTagsCommand", "Select supported unpinned annotation tags in the active view.", null, "unpin");
-                RibbonHelper.AddPushButton(pSelect, "UniversalInvertSelection", "Invert", "AlignTool.Commands.UniversalInvertTagSelectionCommand", "Invert the current selection among supported annotation tags in the active view.", null, "invert");
+                RibbonPanel pSelect = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
+                RibbonHelper.AddStackedTriple(pSelect,
+                    RibbonHelper.CreatePushButtonData("UniversalSelectPinned", "Pinned", "AlignTool.Commands.UniversalSelectPinnedTagsCommand", "Select supported pinned annotation tags in the active view.", null, "pin"),
+                    RibbonHelper.CreatePushButtonData("UniversalSelectUnpinned", "Unpinned", "AlignTool.Commands.UniversalSelectUnpinnedTagsCommand", "Select supported unpinned annotation tags in the active view.", null, "unpin"),
+                    RibbonHelper.CreatePushButtonData("UniversalInvertSelection", "Invert", "AlignTool.Commands.UniversalInvertTagSelectionCommand", "Invert the current selection among supported annotation tags in the active view.", null, "invert"));
 
-                RibbonPanel pManage = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ANNOTATION MANAGER");
+                RibbonPanel pManage = RibbonHelper.GetOrCreatePanel(application, "BIM TOOLS", "ALIGN");
                 RibbonHelper.AddStackedTriple(pManage,
                     RibbonHelper.CreatePushButtonData("AnnotationAlignH", "Align H", "AlignTool.Commands.AnnotationAlignHorizontalCommand", "Align selected text notes, dimensions and tags to a common horizontal centre.", null, "align_h"),
                     RibbonHelper.CreatePushButtonData("AnnotationAlignV", "Align V", "AlignTool.Commands.AnnotationAlignVerticalCommand", "Align selected text notes, dimensions and tags to a common vertical centre.", null, "align_v"),
