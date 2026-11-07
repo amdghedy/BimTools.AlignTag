@@ -98,8 +98,8 @@ namespace AlignTool
                     RibbonHelper.CreatePushButtonData("MepTagAudit", "MEP Audit", "AlignTool.Commands.MepTagAuditCommand", "Report MEP tag counts, pinned tags and tags without leaders.", null, "audit"));
                 RibbonHelper.AddStackedTriple(pMep,
                     RibbonHelper.CreatePushButtonData("IntelligentCsdOptimizer", "CSD Optimize", "AlignTool.Commands.IntelligentCsdOptimizerCommand", "Extract native MEP connector envelopes, generate ranked section arrangements and review/export candidates without modifying the model.", null, "stack"),
-                    RibbonHelper.CreatePushButtonData("MepCsdHelp", "CSD Guide", "AlignTool.Commands.AboutCommand", "Open BIM TOOLS ALIGN information and usage guidance.", null, "about"),
-                    RibbonHelper.CreatePushButtonData("MepCsdAudit", "CSD Audit", "AlignTool.Commands.MepTagAuditCommand", "Audit supported MEP tags in the active view.", null, "audit"));
+                    RibbonHelper.CreatePushButtonData("Revit3DCoordination", "3D Coord", "AlignTool.Commands.Revit3DCoordinationCommand", "Extract linked/native MEP solids, insulation and connectors; run native Boolean clash screening and inspect results read-only.", null, "3d"),
+                    RibbonHelper.CreatePushButtonData("MepCsdHelp", "CSD Guide", "AlignTool.Commands.AboutCommand", "Open BIM TOOLS ALIGN information and usage guidance.", null, "about"));
 
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
