@@ -105,6 +105,11 @@ namespace AlignTool
                     "Generate actual solid cross-sections at configurable corridor stations; read-only review.",
                     null, "3d");
 
+                RibbonHelper.AddPushButton(pMep, "ClearanceProfileEditor", "Clearance Profiles",
+                    "AlignTool.Commands.ClearanceProfileEditorCommand",
+                    "Create and manage project-specific maintenance and access clearance profiles; no model changes.",
+                    null, "3d");
+
                 Logger.Info("Ribbon registration completed.");
                 return Result.Succeeded;
             }
