@@ -94,6 +94,18 @@ Universal alignment detects supported annotation elements through their writable
 
 The universal commands intentionally move tag heads only. They do not claim to normalize leader geometry for spatial tags or to align dimensions, text notes, symbols, or arbitrary model elements.
 
+### ANNOTATION MANAGER
+
+The first Annotation Manager layer adds geometry-based operations for selected **TextNote**, **Dimension**, and supported tag elements:
+
+- Align H / Align V: align annotation bounding-box centres using active-view axes.
+- Dist H / Dist V: evenly distribute annotation centres along the active-view horizontal or vertical axis.
+- Audit: inspect visible annotation bounds and report potential 2D overlaps and elements without usable view bounds.
+- Resolve: calculate a collision-reduction move plan, show a confirmation preview, then apply only after the user confirms. Pinned elements are excluded.
+
+Spacing for the collision planner currently defaults to 2 mm. The audit is a geometric screening tool, not a semantic checker: bounding-box intersections can include intentional overlaps and cannot prove that leaders, dimension witness lines, text readability, or plotted output are correct. Re-run Audit after applying a plan and visually review the view. Every move is performed in a Revit transaction with per-element failure isolation.
+
+The manager uses Revit view-specific bounding boxes and ElementTransformUtils.MoveElement; it does not rewrite dimension references or text content. Leader elbow/endpoint optimization, MEP-host-aware placement, configurable rule profiles, persistent audit reports and a richer graphical preview remain planned work and are not claimed as complete in this phase.
 ### ARRANGE
 Stack (uncross) · Left Col · Right Col · Untangle · Flip · Parallel · Eq Offset · Match Len · Minimize
 
