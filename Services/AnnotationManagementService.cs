@@ -209,17 +209,31 @@ namespace AlignTool.Services
         public static string Describe(AuditResult audit)
         {
             if (audit == null) return "No audit data.";
-            return "Annotations inspected: " + audit.Items.Count +
-                   "\nPotential overlaps: " + audit.Collisions.Count +
-                   "\nItems without usable view bounds: " + audit.Unsupported.Count +
-                   "\nPinned items: " + audit.Items.Count(x => x.Pinned);
+            var lines = new List<string>
+            {
+                "Annotations inspected: " + audit.Items.Count,
+                "Potential overlaps: " + audit.Collisions.Count,
+                "Items without usable view bounds: " + audit.Unsupported.Count,
+                "Pinned items: " + audit.Items.Count(x => x.Pinned)
+            };
+            foreach (var pair in audit.Collisions.Take(15))
+                lines.Add("Overlap: " + pair.Item1.Kind + " #" + pair.Item1.Element.Id.IntegerValue +
+                    " ↔ " + pair.Item2.Kind + " #" + pair.Item2.Element.Id.IntegerValue);
+            if (audit.Collisions.Count > 15) lines.Add("... " + (audit.Collisions.Count - 15) + " more overlap pair(s).");
+            foreach (string issue in audit.Unsupported.Take(5)) lines.Add("Bounds unavailable: " + issue);
+            return string.Join("\\n", lines);
         }
 
         public static string Preview(IList<MovePlan> plan)
         {
             if (plan == null || plan.Count == 0) return "No changes are required.";
-            return "Proposed element moves: " + plan.Count +
-                   "\nPinned elements are excluded. Review the model after applying; leader and dimension constraints remain governed by Revit.";
+            var lines = new List<string> { "Proposed element moves: " + plan.Count };
+            foreach (MovePlan move in plan.Take(12))
+                lines.Add("#" + move.Element.Id.IntegerValue + " — " + move.Reason +
+                    " (" + (move.Delta.GetLength() * 304.8).ToString("F1") + " mm)");
+            if (plan.Count > 12) lines.Add("... " + (plan.Count - 12) + " more planned move(s).");
+            lines.Add("Pinned elements are excluded. Review the model after applying; Revit retains responsibility for dimension and leader constraints.");
+            return string.Join("\\n", lines);
         }
 
         private static Item CreateItem(Element e, View view)
