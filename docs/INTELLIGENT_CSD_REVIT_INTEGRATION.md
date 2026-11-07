@@ -57,3 +57,26 @@ Added `Services/Csd3DCoordinationEngine.cs`, a Revit-independent analysis core:
 ### Scope boundary
 
 This is the analysis-engine foundation, not the completed Revit integration. It does not yet extract full routed solids, fitting bodies, connector graphs or access zones from a live Revit model, and it does not yet drive candidate movements through a 3D route solver. Its narrow phase is a swept-envelope centreline-distance calculation, not Boolean intersection of native Revit solids. Section checks report route presence at defined planes, not reconstructed solid sections. Those model adapters, candidate geometry transforms and Revit 2020 model-based validation remain the next tasks. No Revit elements are modified.
+
+
+## Live Revit 2020 3D geometry extraction milestone
+
+A new **3D Coord** command is registered in the ALIGN ribbon. It invokes `Revit3DCoordinationExtractionService` from a Revit API read-only command and reports:
+- Native element solids for supported ducts, pipes, fittings, accessories, cable trays, conduits and MEP equipment.
+- Loaded linked-model geometry transformed into host coordinates, with active-view crop-box filtering.
+- Attached duct/pipe insulation and lining solids.
+- Connector inventories, domains, shapes, connected state and references exposed by Revit's connector API.
+- Broad-phase element bounding-box filtering followed by native `BooleanOperationsUtils.ExecuteBooleanOperation(..., Intersect)` solid-pair checks.
+- Intersection volumes converted to mm³, Boolean failures and extraction diagnostics.
+
+The review window is read-only. It does not create a Revit transaction or alter model elements.
+
+### Current limitations and next integration tasks
+
+- Native solid clash detection currently reports the maximum intersecting solid-pair volume per element pair; it does not yet classify intentional fitting/connector contacts, nor distinguish insulation-only contact from primary-material contact in the UI.
+- Connector references are collected from `Connector.AllRefs`; the next pass must resolve references across the complete linked-document identity map and explicitly classify expected open ends versus missing fitting connections.
+- The current UI is a result inventory, not yet the interactive multi-section corridor workspace.
+- Project-specific maintenance/access zones and persistent approval/audit storage are not yet wired to Revit project profiles.
+- Candidate optimization is not yet driven by full measured 3D solids. No model-changing command is provided.
+
+These boundaries are intentional. The command is a read-only extraction and clash-review stage; representative model validation and CI build are required before production use.
