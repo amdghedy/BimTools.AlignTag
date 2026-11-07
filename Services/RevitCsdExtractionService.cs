@@ -430,14 +430,19 @@ namespace AlignTool.Services
             }
             if (selectedFace == null) return result;
 
+            double outerLoopSign = 0;
             foreach (EdgeArray edgeLoop in selectedFace.EdgeLoops)
             {
                 var points = new List<SectionPoint>();
                 foreach (Edge edge in edgeLoop)
                 {
                     IList<XYZ> tessellated;
-                    try { tessellated = edge.AsCurve().Tessellate(); }
-                    catch { continue; }
+                    try { tessellated = edge.AsCurveFollowingFace(selectedFace).Tessellate(); }
+                    catch
+                    {
+                        try { tessellated = edge.AsCurve().Tessellate(); }
+                        catch { continue; }
+                    }
                     foreach (XYZ hostPoint in tessellated)
                     {
                         double x = (hostPoint - origin).DotProduct(right) * 304.8;
@@ -454,10 +459,28 @@ namespace AlignTool.Services
                         Math.Abs(points[0].Ymm - points[points.Count - 1].Ymm) < 0.01)
                         points.RemoveAt(points.Count - 1);
                     if (points.Count >= 3)
-                        result.Add(new SectionContour { Points = points, IsHole = false });
+                    {
+                        double signedArea = GetSignedArea(points);
+                        if (Math.Abs(outerLoopSign) < 1e-9) outerLoopSign = signedArea;
+                        bool isHole = Math.Abs(outerLoopSign) > 1e-9 &&
+                            signedArea * outerLoopSign < 0;
+                        result.Add(new SectionContour { Points = points, IsHole = isHole });
+                    }
                 }
             }
             return result;
+        }
+
+        private static double GetSignedArea(IList<SectionPoint> points)
+        {
+            double area = 0;
+            for (int i = 0; i < points.Count; i++)
+            {
+                SectionPoint a = points[i];
+                SectionPoint b = points[(i + 1) % points.Count];
+                area += a.Xmm * b.Ymm - b.Xmm * a.Ymm;
+            }
+            return area * 0.5;
         }
 
         private sealed class SourceElement
