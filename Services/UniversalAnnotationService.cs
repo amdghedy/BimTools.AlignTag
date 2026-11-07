@@ -90,12 +90,13 @@ namespace AlignTool.Services
             var movable = elements.Where(e => e != null && !e.Pinned && Supports(e)).ToList();
             if (movable.Count < 2) return 0;
 
-            var coordinates = movable.Select(e => new
+            var coordinates = new List<Coordinate>();
+            foreach (Element element in movable)
             {
-                Element = e,
-                Position = GetHead(e),
-                Value = GetHead(e).DotProduct(axis)
-            }).Where(x => x.Position != null).ToList();
+                XYZ position = GetHead(element);
+                if (position != null)
+                    coordinates.Add(new Coordinate(element, position, position.DotProduct(axis)));
+            }
             if (coordinates.Count < 2) return 0;
 
             double min = coordinates.Min(x => x.Value);
@@ -112,11 +113,8 @@ namespace AlignTool.Services
                 default: return 0;
             }
 
-            return ApplyMoves(doc, coordinates.Select(x => new
-            {
-                x.Element,
-                Destination = x.Position + axis * (target - x.Value)
-            }));
+            return ApplyMoves(doc, coordinates.Select(x =>
+                new Move(x.Element, x.Position + axis * (target - x.Value))));
         }
 
         public static int Distribute(Document doc, View view, IList<Element> elements, bool horizontal)
@@ -135,14 +133,23 @@ namespace AlignTool.Services
             if (Math.Abs(last - first) < 1e-9) return 0;
             double step = (last - first) / (ordered.Count - 1);
 
-            var moves = new List<dynamic>();
+            var moves = new List<Move>();
             for (int i = 1; i < ordered.Count - 1; i++)
             {
                 var item = ordered[i];
                 XYZ destination = item.Position + axis * (first + i * step - item.Value);
                 moves.Add(new Move(item.Element, destination));
             }
-            return ApplyMoves(doc, moves.Select(x => new Move(x.Element, x.Destination)));
+            return ApplyMoves(doc, moves);
+        }
+
+        private sealed class Coordinate
+        {
+            public Element Element { get; private set; }
+            public XYZ Position { get; private set; }
+            public double Value { get; private set; }
+            public Coordinate(Element element, XYZ position, double value)
+            { Element = element; Position = position; Value = value; }
         }
 
         private sealed class Move
@@ -152,13 +159,13 @@ namespace AlignTool.Services
             public Move(Element element, XYZ destination) { Element = element; Destination = destination; }
         }
 
-        private static int ApplyMoves(Document doc, IEnumerable<dynamic> moves)
+        private static int ApplyMoves(Document doc, IEnumerable<Move> moves)
         {
             int moved = 0;
             using (var transaction = new Transaction(doc, "Universal Annotation Alignment"))
             {
                 transaction.Start();
-                foreach (dynamic move in moves)
+                foreach (Move move in moves)
                 {
                     using (var sub = new SubTransaction(doc))
                     {
@@ -167,6 +174,8 @@ namespace AlignTool.Services
                             sub.Start();
                             PropertyInfo property = move.Element.GetType().GetProperty(
                                 "TagHeadPosition", BindingFlags.Instance | BindingFlags.Public);
+                            if (property == null || !property.CanWrite)
+                                throw new InvalidOperationException("Tag head position is not writable.");
                             property.SetValue(move.Element, move.Destination, null);
                             sub.Commit();
                             moved++;
