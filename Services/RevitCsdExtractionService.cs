@@ -28,48 +28,106 @@ namespace AlignTool.Services
             if (doc == null) throw new ArgumentNullException("doc");
             if (view == null) throw new ArgumentNullException("view");
             var ids = selectedIds == null ? new List<ElementId>() : selectedIds.ToList();
-            IEnumerable<Element> source = ids.Count > 0
-                ? ids.Select(doc.GetElement).Where(e => e != null)
-                : new FilteredElementCollector(doc, view.Id).WhereElementIsNotElementType().ToElements();
+            var sources = new List<SourceElement>();
+            var selectedLinks = new List<RevitLinkInstance>();
+            foreach (ElementId id in ids)
+            {
+                Element element = doc.GetElement(id);
+                if (element is RevitLinkInstance) selectedLinks.Add((RevitLinkInstance)element);
+                else if (element != null && IsMepElement(element))
+                    sources.Add(new SourceElement { Element = element, ToHost = Transform.Identity, Prefix = "HOST", ModelName = doc.Title });
+            }
+
+            bool useSelection = sources.Count > 0 || selectedLinks.Count > 0;
+            if (!useSelection)
+            {
+                foreach (Element element in new FilteredElementCollector(doc, view.Id)
+                    .WhereElementIsNotElementType().ToElements())
+                    if (IsMepElement(element))
+                        sources.Add(new SourceElement { Element = element, ToHost = Transform.Identity, Prefix = "HOST", ModelName = doc.Title });
+            }
+
+            IList<RevitLinkInstance> links = selectedLinks;
+            if (links.Count == 0)
+            {
+                try
+                {
+                    links = new FilteredElementCollector(doc, view.Id)
+                        .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().ToList();
+                }
+                catch
+                {
+                    links = new FilteredElementCollector(doc)
+                        .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().ToList();
+                }
+            }
+
+            foreach (RevitLinkInstance link in links)
+            {
+                try
+                {
+                    Document linkedDoc = link.GetLinkDocument();
+                    if (linkedDoc == null) continue;
+                    Transform transform = link.GetTotalTransform();
+                    string modelName = linkedDoc.Title;
+                    foreach (Element linkedElement in new FilteredElementCollector(linkedDoc)
+                        .WhereElementIsNotElementType().ToElements())
+                    {
+                        if (!IsMepElement(linkedElement)) continue;
+                        XYZ localCentre = GetElementCentre(linkedElement);
+                        XYZ hostCentre = localCentre == null ? null : transform.OfPoint(localCentre);
+                        if (hostCentre == null || !IsInsideActiveCrop(view, hostCentre)) continue;
+                        sources.Add(new SourceElement
+                        {
+                            Element = linkedElement, ToHost = transform,
+                            Prefix = "LINK" + link.Id.IntegerValue, ModelName = modelName
+                        });
+                    }
+                }
+                catch { }
+            }
 
             var result = new ExtractionResult { Items = new List<KnowledgeBasedCsdEngine.ServiceItem>() };
-            var seen = new HashSet<int>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             XYZ right = view.RightDirection.Normalize();
             XYZ up = view.UpDirection.Normalize();
             XYZ origin = view.Origin;
-            foreach (Element element in source)
+            foreach (SourceElement source in sources)
             {
-                if (element == null || !IsMepElement(element) || !seen.Add(element.Id.IntegerValue)) continue;
+                Element element = source.Element;
+                string uniqueId = source.Prefix + ":" + element.Id.IntegerValue;
+                if (element == null || !seen.Add(uniqueId)) continue;
                 try
                 {
                     double width, height;
                     int connectorCount;
                     string systemName;
-                    ReadConnectorEnvelope(element, right, up, out width, out height, out connectorCount, out systemName);
+                    ReadConnectorEnvelope(element, source.ToHost, right, up,
+                        out width, out height, out connectorCount, out systemName);
                     result.ConnectorCount += connectorCount;
                     if (connectorCount == 0)
                     {
                         result.ElementsWithoutConnectors++;
                         ReadParameterEnvelope(element, ref width, ref height);
                     }
-
                     if (width <= 0 || height <= 0)
                     {
                         result.SkippedElements++;
                         continue;
                     }
 
-                    XYZ centre = GetElementCentre(element);
+                    XYZ localCentre = GetElementCentre(element);
+                    XYZ centre = localCentre == null ? null : source.ToHost.OfPoint(localCentre);
                     if (centre == null) { result.SkippedElements++; continue; }
                     double x = (centre - origin).DotProduct(right) * 304.8;
                     double y = (centre - origin).DotProduct(up) * 304.8;
                     width = Math.Max(10, width);
                     height = Math.Max(10, height);
                     string discipline = GetDiscipline(element);
-                    string name = element.Name ?? element.GetType().Name;
+                    string name = (element.Name ?? element.GetType().Name) + " [" + source.ModelName + "]";
                     result.Items.Add(new KnowledgeBasedCsdEngine.ServiceItem
                     {
-                        Id = element.Id.IntegerValue.ToString(),
+                        Id = uniqueId,
                         Name = name,
                         SystemName = systemName,
                         Discipline = discipline,
@@ -86,13 +144,35 @@ namespace AlignTool.Services
                     result.MinYmm = result.Items.Count == 1 ? y : Math.Min(result.MinYmm, y);
                     result.MaxYmm = result.Items.Count == 1 ? y : Math.Max(result.MaxYmm, y);
                 }
-                catch
-                {
-                    result.SkippedElements++;
-                }
+                catch { result.SkippedElements++; }
             }
-            result.SourceDescription = ids.Count > 0 ? "Current selection" : "Active view";
+            result.SourceDescription = (useSelection ? "Selection" : "Active view") +
+                " + linked models (" + links.Count + ")";
             return result;
+        }
+
+        private sealed class SourceElement
+        {
+            public Element Element;
+            public Transform ToHost;
+            public string Prefix;
+            public string ModelName;
+        }
+
+        private static bool IsInsideActiveCrop(View view, XYZ hostPoint)
+        {
+            try
+            {
+                if (!view.CropBoxActive) return true;
+                BoundingBoxXYZ crop = view.CropBox;
+                if (crop == null) return true;
+                XYZ local = (crop.Transform ?? Transform.Identity).Inverse.OfPoint(hostPoint);
+                const double tolerance = 0.01;
+                return local.X >= crop.Min.X - tolerance && local.X <= crop.Max.X + tolerance &&
+                       local.Y >= crop.Min.Y - tolerance && local.Y <= crop.Max.Y + tolerance &&
+                       local.Z >= crop.Min.Z - tolerance && local.Z <= crop.Max.Z + tolerance;
+            }
+            catch { return true; }
         }
 
         private static bool IsMepElement(Element e)
@@ -115,7 +195,7 @@ namespace AlignTool.Services
                    id == (int)BuiltInCategory.OST_ElectricalEquipment;
         }
 
-        private static void ReadConnectorEnvelope(Element element, XYZ right, XYZ up,
+        private static void ReadConnectorEnvelope(Element element, Transform toHost, XYZ right, XYZ up,
             out double widthMm, out double heightMm, out int count, out string systemName)
         {
             widthMm = 0; heightMm = 0; count = 0; systemName = "";
@@ -131,28 +211,32 @@ namespace AlignTool.Services
             {
                 if (connector == null) continue;
                 count++;
-                double w = 0, h = 0;
                 try
                 {
+                    double w = 0, h = 0;
                     if (connector.Shape == ConnectorProfileType.Rectangular ||
                         connector.Shape == ConnectorProfileType.Oval)
                     {
-                        w = connector.Width * 304.8;
-                        h = connector.Height * 304.8;
+                        Transform cs = connector.CoordinateSystem;
+                        XYZ bx = toHost.OfVector(cs.BasisX).Normalize();
+                        XYZ by = toHost.OfVector(cs.BasisY).Normalize();
+                        double cw = connector.Width * 304.8;
+                        double ch = connector.Height * 304.8;
+                        w = Math.Abs(bx.DotProduct(right)) * cw + Math.Abs(by.DotProduct(right)) * ch;
+                        h = Math.Abs(bx.DotProduct(up)) * cw + Math.Abs(by.DotProduct(up)) * ch;
                     }
                     else if (connector.Shape == ConnectorProfileType.Round)
                     {
                         w = h = connector.Radius * 2 * 304.8;
                     }
+                    widthMm = Math.Max(widthMm, w);
+                    heightMm = Math.Max(heightMm, h);
                     if (string.IsNullOrEmpty(systemName) && connector.MEPSystem != null)
                         systemName = connector.MEPSystem.Name;
                 }
                 catch { }
-                widthMm = Math.Max(widthMm, w);
-                heightMm = Math.Max(heightMm, h);
             }
-            if (widthMm > 0 && heightMm > 0) return;
-            widthMm = 0; heightMm = 0;
+            if (widthMm <= 0 || heightMm <= 0) { widthMm = 0; heightMm = 0; }
         }
 
         private static void ReadParameterEnvelope(Element element, ref double width, ref double height)
