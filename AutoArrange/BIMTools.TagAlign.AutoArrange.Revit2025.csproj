@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-year project: Autodesk Revit 2025
+  Target framework: net8.0-windows
+  Nice3point.Revit.Api: 2025.*
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RevitYear>2025</RevitYear>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Shared sources and properties -->
+  <Import Project="AutoArrange.Shared.props" />
+
+  <!-- Revit API references via Nice3point NuGet (no local install needed) -->
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.*" ExcludeAssets="runtime" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.*" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

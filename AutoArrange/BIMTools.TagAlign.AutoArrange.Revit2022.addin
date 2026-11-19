@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Assembly>BIMTools.TagAlign.AutoArrange.Revit2022.dll</Assembly>
+    <AddInId>6C1D2E54-3B7A-4F0E-9C21-5A8E7D2B4F22-01</AddInId>
+    <FullClassName>BIMTools.TagAlign.Leaders.AlignTagsAutoCommand</FullClassName>
+    <Text>Align Tags Automatically</Text>
+    <VendorId>BIMT</VendorId>
+    <VendorDescription>BIM TOOLS</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>BIMTools.TagAlign.AutoArrange.Revit2022.dll</Assembly>
+    <AddInId>6C1D2E54-3B7A-4F0E-9C21-5A8E7D2B4F22-02</AddInId>
+    <FullClassName>BIMTools.TagAlign.Leaders.LeaderTunerCommand</FullClassName>
+    <Text>Leader Tuner</Text>
+    <VendorId>BIMT</VendorId>
+    <VendorDescription>BIM TOOLS</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>BIMTools.TagAlign.AutoArrange.Revit2022.dll</Assembly>
+    <AddInId>6C1D2E54-3B7A-4F0E-9C21-5A8E7D2B4F22-03</AddInId>
+    <FullClassName>BIMTools.TagAlign.Leaders.AlignHeadsCommand</FullClassName>
+    <Text>Align Tag Heads</Text>
+    <VendorId>BIMT</VendorId>
+    <VendorDescription>BIM TOOLS</VendorDescription>
+  </AddIn>
+</RevitAddIns>

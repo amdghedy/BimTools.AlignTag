@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-year project: Autodesk Revit 2020
+  Target framework: net472
+  Nice3point.Revit.Api: 2020.2.90
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RevitYear>2020</RevitYear>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Shared sources and properties -->
+  <Import Project="AutoArrange.Shared.props" />
+
+  <!-- Revit API references via Nice3point NuGet (no local install needed) -->
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI"   Version="2020.2.90" ExcludeAssets="runtime" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2020.2.90" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

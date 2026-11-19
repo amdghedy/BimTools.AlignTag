@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    BIMTools.TagAlign.AutoArrange shared source fragment.
+    Each per-year .csproj imports this file so that ALL C# source is declared in exactly one place.
+
+    Per-year projects set the following MSBuild properties before importing:
+        RevitYear           e.g. 2025
+        TargetFramework     inherited from per-year project
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>BIMTools.TagAlign.Leaders</RootNamespace>
+    <AssemblyName>BIMTools.TagAlign.AutoArrange.Revit$(RevitYear)</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Version>1.0.0</Version>
+    <Company>BIM TOOLS</Company>
+    <Product>BIM TOOLS Tag Align AutoArrange for Revit $(RevitYear)</Product>
+    <Copyright>Copyright (c) BIM TOOLS</Copyright>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!-- Shared sources – all .cs files in this folder -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)AlignOptionsForm.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AlignTagsAutoCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Annotations.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnnotTools.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)HelpSystem.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LeaderAlignEngine.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ProtractorControl.cs" />
+  </ItemGroup>
+
+</Project>
