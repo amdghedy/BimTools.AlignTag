@@ -1,0 +1,111 @@
+name: Build BIMTools.TagAlign.AutoArrange (All Revit Versions)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "AutoArrange/**"
+      - ".github/workflows/build-autoarrange.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "AutoArrange/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Revit ${{ matrix.revit_year }} (${{ matrix.framework }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - revit_year: 2020
+            framework:  net472
+            nice3point:  "2020.*"
+          - revit_year: 2021
+            framework:  net48
+            nice3point:  "2021.*"
+          - revit_year: 2022
+            framework:  net48
+            nice3point:  "2022.*"
+          - revit_year: 2023
+            framework:  net48
+            nice3point:  "2023.*"
+          - revit_year: 2024
+            framework:  net48
+            nice3point:  "2024.*"
+          - revit_year: 2025
+            framework:  net8.0-windows
+            nice3point:  "2025.*"
+          - revit_year: 2026
+            framework:  net8.0-windows
+            nice3point:  "2026.*"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+
+      - name: Add MSBuild to PATH (net47x / net48 builds)
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet packages
+        run: dotnet restore AutoArrange/BIMTools.TagAlign.AutoArrange.Revit${{ matrix.revit_year }}.csproj
+
+      - name: Build Release x64
+        run: >
+          dotnet build
+          AutoArrange/BIMTools.TagAlign.AutoArrange.Revit${{ matrix.revit_year }}.csproj
+          --configuration Release
+          --no-restore
+          -p:RevitInstallDir="C:\\non-existent\\"
+
+      - name: Stage artifact
+        shell: pwsh
+        run: |
+          $yr    = "${{ matrix.revit_year }}"
+          $stage = "stage/BIMTools.TagAlign.AutoArrange.Revit$yr"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          $dll = "AutoArrange/bin/Release/BIMTools.TagAlign.AutoArrange.Revit$yr.dll"
+          Copy-Item $dll -Destination $stage
+          $pdb = "AutoArrange/bin/Release/BIMTools.TagAlign.AutoArrange.Revit$yr.pdb"
+          if (Test-Path $pdb) { Copy-Item $pdb -Destination $stage }
+
+          $addin = "AutoArrange/BIMTools.TagAlign.AutoArrange.Revit$yr.addin"
+          $addinOut = "$stage/BIMTools.TagAlign.AutoArrange.Revit$yr.addin"
+          (Get-Content $addin) `
+            -replace '<Assembly>.*?</Assembly>',
+                     "<Assembly>BIMTools.TagAlign.AutoArrange.Revit$yr.dll</Assembly>" `
+            | Set-Content $addinOut
+
+          Copy-Item "AutoArrange/README.md" -Destination $stage -ErrorAction SilentlyContinue
+
+      - name: Zip release folder
+        shell: pwsh
+        run: |
+          $yr  = "${{ matrix.revit_year }}"
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Compress-Archive `
+            -Path "stage/BIMTools.TagAlign.AutoArrange.Revit$yr/*" `
+            -DestinationPath "release/BIMTools.TagAlign.AutoArrange.Revit$yr.zip" `
+            -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIMTools.TagAlign.AutoArrange.Revit${{ matrix.revit_year }}
+          path: release/BIMTools.TagAlign.AutoArrange.Revit${{ matrix.revit_year }}.zip
+          retention-days: 30
+          if-no-files-found: error
