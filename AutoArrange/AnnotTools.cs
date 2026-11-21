@@ -45,7 +45,7 @@ namespace BIMTools.TagAlign.Leaders
 
         class HeadItem
         {
-            public Annot An; public XYZ End, Elbow; public P2 H, Off; public bool HasOff; public double Depth;
+            public Annot An; public XYZ End; public P2 H, Off; public bool HasOff; public double Depth;
         }
 
         /// <summary>Align / distribute tag heads (like Revit Align, but for tag heads with leaders).</summary>

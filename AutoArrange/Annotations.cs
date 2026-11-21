@@ -32,6 +32,9 @@ namespace BIMTools.TagAlign.Leaders
         public Element El;
         public string Key = "";
         public virtual bool HasLeader { get { return true; } }
+        public string CategoryName { get { return El.Category != null ? El.Category.Name : ""; } }
+        /// <summary>Used only inside a rolled-back SubTransaction to measure the bare tag head.</summary>
+        public virtual void SetLeaderVisible(bool on) { }
         public abstract void Prepare(LeaderAlignResult r);
         public abstract bool Read(out XYZ head, out XYZ end, out XYZ elbow);
         public abstract void Apply(XYZ head, XYZ end, XYZ elbow, LeaderAlignResult r);
@@ -46,6 +49,7 @@ namespace BIMTools.TagAlign.Leaders
             string tx = Refl.Get(t, "TagText") as string;
             Key = tx ?? "";
         }
+        public override void SetLeaderVisible(bool on) { _t.HasLeader = on; }
         public override void Prepare(LeaderAlignResult r)
         {
             try
@@ -79,6 +83,7 @@ namespace BIMTools.TagAlign.Leaders
     internal class SpatialAnnot : Annot
     {
         public SpatialAnnot(Element e) { El = e; }
+        public override void SetLeaderVisible(bool on) { Refl.Set(El, "HasLeader", on); }
         public override void Prepare(LeaderAlignResult r) { Refl.Set(El, "HasLeader", true); }
         public override bool Read(out XYZ head, out XYZ end, out XYZ elbow)
         {
@@ -186,6 +191,7 @@ namespace BIMTools.TagAlign.Leaders
             return (a.Length - i) - (b.Length - j);
         }
     }
+
     internal static class TagLeaderHelper
     {
         public static bool GetLeaderPoints(IndependentTag t, out XYZ end, out XYZ elbow)
@@ -278,4 +284,3 @@ namespace BIMTools.TagAlign.Leaders
         }
     }
 }
-
