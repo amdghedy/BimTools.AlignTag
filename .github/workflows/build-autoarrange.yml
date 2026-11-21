@@ -83,6 +83,9 @@ jobs:
           $pdb = "AutoArrange/bin/Release/BIMTools.TagAlign.AutoArrange.Revit$yr.pdb"
           if (Test-Path $pdb) { Copy-Item $pdb -Destination $stage }
 
+          $deps = "AutoArrange/bin/Release/BIMTools.TagAlign.AutoArrange.Revit$yr.deps.json"
+          if (Test-Path $deps) { Copy-Item $deps -Destination $stage }
+
           $addin = "AutoArrange/BIMTools.TagAlign.AutoArrange.Revit$yr.addin"
           $addinOut = "$stage/BIMTools.TagAlign.AutoArrange.Revit$yr.addin"
           (Get-Content $addin) `
@@ -91,6 +94,7 @@ jobs:
             | Set-Content $addinOut
 
           Copy-Item "AutoArrange/README.md" -Destination $stage -ErrorAction SilentlyContinue
+          if (Test-Path "AutoArrange/images") { Copy-Item "AutoArrange/images" -Destination $stage -Recurse -Force -ErrorAction SilentlyContinue }
 
       - name: Zip release folder
         shell: pwsh

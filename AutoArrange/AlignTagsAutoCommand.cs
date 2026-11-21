@@ -1,4 +1,3 @@
-using TaskDialog = Autodesk.Revit.UI.TaskDialog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,6 +7,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 using View = Autodesk.Revit.DB.View;
+using TaskDialog = Autodesk.Revit.UI.TaskDialog;
 
 namespace BIMTools.TagAlign.Leaders
 {
@@ -33,7 +33,7 @@ namespace BIMTools.TagAlign.Leaders
             return false;
         }
 
-        /// <summary>Preselection -> use it; else every tag in the view (if asked); else "Select Tags To Be Aligned".</summary>
+        /// <summary>Preselection -> use it; else every tag in the view (if asked); else "Select the tags to arrange".</summary>
         public static List<Element> GetTargets(UIDocument uidoc, View view, bool notes, bool spatial, bool allInView, string prompt)
         {
             Document doc = uidoc.Document;
@@ -56,17 +56,41 @@ namespace BIMTools.TagAlign.Leaders
             }
         }
 
+        static string Arrow(double before, double after, string unit)
+        {
+            string t = Math.Round(before) + " " + unit + "  ->  " + Math.Round(after) + " " + unit;
+            if (before > 0.5) t += "   (" + (after <= before ? "-" : "+") + Math.Abs(Math.Round((after - before) / before * 100)) + "%)";
+            return t;
+        }
+
         public static void Report(string title, LeaderAlignResult res, bool showCrossings)
         {
             string msg = string.Format("Processed: {0}\nSkipped: {1}", res.Aligned, res.Skipped);
-            if (showCrossings) msg += "\nLeader crossings left: " + res.Crossings;
+            if (showCrossings)
+            {
+                if (res.CrossingsBefore >= 0) msg += "\nLeader crossings: " + res.CrossingsBefore + "  ->  " + res.Crossings;
+                else msg += "\nLeader crossings left: " + res.Crossings;
+                if (res.OverlapsBefore >= 0 && res.OverlapsAfter >= 0) msg += "\nOverlapping tags: " + res.OverlapsBefore + "  ->  " + res.OverlapsAfter;
+                if (res.LenBeforeMm > 0 && res.LenAfterMm >= 0) msg += "\nLeader length on sheet: " + Arrow(res.LenBeforeMm, res.LenAfterMm, "mm");
+                if (res.Groups > 1) msg += "\nGroups: " + res.Groups;
+            }
             if (res.ElbowFailures > 0) msg += "\nElbow could not be set on " + res.ElbowFailures + " item(s).";
             if (res.Notes.Count > 0) msg += "\n\n" + string.Join("\n", res.Notes.Take(8));
             TaskDialog.Show(title, msg);
         }
+
+        public static void ReportOverlaps(LeaderAlignResult res)
+        {
+            string msg = "Tags moved: " + res.Aligned + "\nSkipped: " + res.Skipped;
+            if (res.OverlapsBefore >= 0) msg += "\nOverlapping pairs: " + res.OverlapsBefore + "  ->  " + res.OverlapsAfter;
+            if (res.OverlapsAfter > 0) msg += "\n\n" + res.OverlapsAfter + " overlap(s) remain because the tags reached the maximum move distance. " +
+                                              "Raise that limit, or use Smart Tag Arrange for a crowded group.";
+            if (res.Notes.Count > 0) msg += "\n\n" + string.Join("\n", res.Notes.Take(8));
+            TaskDialog.Show("Resolve Overlaps", msg);
+        }
     }
 
-    /// <summary>"Align Tags Automatically": Choose Angle -> select tags -> Pick Lowest / Highest Tag Head.</summary>
+    /// <summary>"Smart Tag Arrange": layout dialog -> select tags -> click the column start (and optionally its end).</summary>
     [Transaction(TransactionMode.Manual)]
     public class AlignTagsAutoCommand : IExternalCommand
     {
@@ -88,25 +112,41 @@ namespace BIMTools.TagAlign.Leaders
             List<Element> targets;
             try
             {
-                targets = CommandHelper.GetTargets(uidoc, view, s.IncludeNotes, s.IncludeSpatial, s.AllInView, "Select Tags To Be Aligned");
+                targets = CommandHelper.GetTargets(uidoc, view, s.IncludeNotes, s.IncludeSpatial, s.AllInView, "Select the tags to arrange");
                 if (targets.Count == 0) return Result.Cancelled;
-                if (!s.AutoColumn)
+                s.ReferenceHead = null; s.LowestHead = null; s.HighestHead = null;
+                if (s.UseReferenceTag)
+                {
+                    Reference rr = uidoc.Selection.PickObject(ObjectType.Element, new AnnotFilter(s.IncludeNotes, s.IncludeSpatial),
+                                                              "Pick the existing tag whose column you want to continue upward");
+                    Element refEl = doc.GetElement(rr);
+                    List<Annot> ra = AnnotFactory.Build(new List<Element> { refEl }, true, true);
+                    XYZ rh, re, rel;
+                    if (ra.Count == 0 || !ra[0].Read(out rh, out re, out rel)) { TaskDialog.Show("Smart Tag Arrange", "The picked element has no readable tag position."); return Result.Cancelled; }
+                    s.ReferenceHead = rh;
+                    targets.RemoveAll(e => e.Id.Equals(refEl.Id));
+                    if (targets.Count == 0) return Result.Cancelled;
+                }
+                else if (!s.AutoColumn)
                 {
                     CommandHelper.EnsureWorkPlane(doc, view);
-                    s.LowestHead = uidoc.Selection.PickPoint(ObjectSnapTypes.None, "Pick Lowest Tag Head");
-                    s.HighestHead = uidoc.Selection.PickPoint(ObjectSnapTypes.None, "Pick Highest Tag Head");
+                    s.LowestHead = uidoc.Selection.PickPoint(ObjectSnapTypes.None, "Click where the first (bottom) row should start");
+                    s.HighestHead = s.DistributeBetweenPicks
+                        ? uidoc.Selection.PickPoint(ObjectSnapTypes.None, "Click where the last (top) row should end")
+                        : null;
                 }
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { return Result.Cancelled; }
 
             LeaderAlignResult res;
-            using (Transaction t = new Transaction(doc, "Align Tags Automatically"))
+            using (Transaction t = new Transaction(doc, "Smart Tag Arrange"))
             {
                 t.Start();
                 res = LeaderAlignEngine.Run(doc, view, targets, s);
                 t.Commit();
             }
-            CommandHelper.Report("Align Tags Automatically", res, true);
+            if (!s.DetailedReport) { res.CrossingsBefore = -1; res.OverlapsBefore = -1; res.OverlapsAfter = -1; res.LenBeforeMm = -1; res.Groups = 0; }
+            CommandHelper.Report("Smart Tag Arrange", res, true);
             return Result.Succeeded;
         }
     }
@@ -131,7 +171,7 @@ namespace BIMTools.TagAlign.Leaders
             s.Save();
 
             List<Element> targets;
-            try { targets = CommandHelper.GetTargets(uidoc, view, false, s.IncludeSpatial, s.AllInView, "Select Tags To Re-shape"); }
+            try { targets = CommandHelper.GetTargets(uidoc, view, false, s.IncludeSpatial, s.AllInView, "Select the tags to re-shape"); }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { return Result.Cancelled; }
             if (targets.Count == 0) return Result.Cancelled;
 
@@ -166,7 +206,7 @@ namespace BIMTools.TagAlign.Leaders
             }
 
             List<Element> targets;
-            try { targets = CommandHelper.GetTargets(uidoc, view, notes, spatial, false, "Select Tags To Align"); }
+            try { targets = CommandHelper.GetTargets(uidoc, view, notes, spatial, false, "Select the tags to align"); }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { return Result.Cancelled; }
             if (targets.Count == 0) return Result.Cancelled;
 
@@ -182,4 +222,3 @@ namespace BIMTools.TagAlign.Leaders
         }
     }
 }
-
